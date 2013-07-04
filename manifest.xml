@@ -1,0 +1,18 @@
+<package>
+  <description brief="tue_owls_indigolog_exec">
+
+     tue_owls_indigolog_exec
+
+  </description>
+  <author>E.Geerts/Z.Li/J.Denissen</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/tue_owls_indigolog_exec</url>
+  <depend package="rospy"/>
+  <depend package="robot_skills"/>
+  <depend package="robot_smach_states"/>
+  <depend package="psi"/>
+
+</package>
+
+
