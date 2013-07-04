@@ -151,6 +151,7 @@ poss(perception_recognition(laser_2d, _, _, _, _), true).
 
 proc(demo_seq_test, [navigate_generic(goal_pose_2d, 2,0, 3), spindle(medium, 10)]).
 
+proc(demo_query_test, [query(object_roi(coke-1, X, Y, Z), _), navigate_generic(goal_pose_2d, X, Y, Z)]).
 
 % %%% Migration of Find object and Grasp object state machine
 
@@ -159,7 +160,7 @@ proc(demo_seq_test, [navigate_generic(goal_pose_2d, 2,0, 3), spindle(medium, 10)
 % :-dynamic visited/3.
 
 % % object_loc(coke-1, 1.0, 2.2, 3.2).
-% object_roi(coke-1, 1.0, 2.0, 3.0).
+object_roi(coke-1, 1.0, 2.0, 3.0).
 % object_roi(coke-1, 2.0, 3.0, 4.0).
 
 % prim_fluent(object_foundp).

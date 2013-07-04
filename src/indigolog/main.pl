@@ -37,6 +37,16 @@ util_next :- thread_send_message(indigolog_thread, next_step).
 
 util_exog :- thread_send_message(indigolog_thread, request(table(4), 3)).
 
+util_feedback(Act, Result) :-
+        executing_action(Act),
+        thread_send_message(indigolog_thread, got_sensing(Act, Result)).
+
+util_feedback(Result) :-
+        executing_action(Act),
+        thread_send_message(indigolog_thread, got_sensing(Act, Result)).
+
+
+        
 % prim_fluent(robotDir).
 
 % prim_fluent(today).

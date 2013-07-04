@@ -604,6 +604,8 @@ trans(for(V,[F|L],P),H,[E1,for(V,L,P)],H1) :-
 %%    a test action like ?(P) but it leaves a test(P) mark in H
 trans(??(P),H,[],[test(P)|H]):- holds(P,H). 
 
+trans(query(P, S), H, [], H) :- call(P) -> S=true; S=failed. 
+
 %% Wait and commit are two "meta" actions.
 %% wait action tells the interpreter to wait until an exogenous action arrives
 %% commit is used in search and searchc to commit to the plan computed so far
@@ -777,12 +779,9 @@ mayEvolve(E1, H1, E2, H2, S) :-
 :- dynamic
         indigolog_action/1,
         excuting_action/1, 
-        excuting_action/3, %% assert the current action so that Python can query
-        action_counter/1,  %% just a counter
-        got_sensing/2.     %% report by Python executive
+        excuting_action/4, %% assert the current action so that Python can query
+        action_counter/1.  %% just a counter
 
-:- multifile
-        got_sensing/2.
 
 refresh_counter :- retractall(action_counter(_)), assertz(action_counter(0)).
 
@@ -794,13 +793,11 @@ update_counter(M) :-
 %%    finds out the type of an action
 type_action(Act, sensing) :- senses(Act); senses(Act, _); senses(Act, _, _, _, _), !.
 type_action(Act, system) :- system_action(Act), !.
-type_action(_, nonsensing). %% for the others
+type_action(_, nonsensing). %% for the rest
 
 :- dynamic 
     executing_action/1,
     indigolog_action/1.
-:- multifile indigolog_action/1.
-:- multifile executing_action/1.
 
 %% -- assert to do action to the database
 assert_action(Act) :-
@@ -809,21 +806,15 @@ assert_action(Act) :-
         assertz(executing_action(Act)),
         assertz(indigolog_action(Act)).
 
-%% 
+%% -- 
 execute_action(Action, H, Type, Outcome) :-
         %% Increment action counter by 1 and store action information
 	update_counter(M), 
 	assert(executing_action(M, Action, H, Type)), %% Store new action to execute
         assert_action(Action), %% maybe duplicate
-        %% Busy waiting for sensing outcome to arrive (ALWAYS)
-        %% TODO: replaced by some wait for message or wait for term
-        %%%% TEST: Ziyang
-        %% assertz(got_sensing(Action, true)),
-	repeat,   
-	got_sensing(Action, Outcome), %% wait until get sensing result
+        thread_get_message(got_sensing(Action, Outcome)),
 	retract(executing_action(M, _, _, _)),
         retract(executing_action(_)),
-	retract(got_sensing(Action, _)), !,
 	report_message(system(2), 
 		['Action *', (M, Action), '* completed with outcome:', Outcome]).
 
