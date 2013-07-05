@@ -18,7 +18,7 @@ def startup():
 def initialize(self):
     self.lights.set_color(0,0,1)  #be sure lights are blue
 
-    self.head.reset_position()
+    ## self.head.reset_position()
     self.leftArm.reset_arm()
     self.leftArm.send_gripper_goal_close()
     self.rightArm.reset_arm()

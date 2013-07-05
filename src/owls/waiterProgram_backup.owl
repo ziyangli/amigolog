@@ -1,0 +1,459 @@
+<?xml version="1.0"?>
+<rdf:RDF
+    xmlns:protege="http://protege.stanford.edu/plugins/owl/protege#"
+    xmlns:objects="http://object.ontology.indigolog/waiterProgram#"
+    xmlns="http://action.ontology.indigolog/waiterProgram#"
+    xmlns:xsp="http://www.owl-ontologies.com/2005/08/07/xsp.owl#"
+    xmlns:service="http://www.daml.org/services/owl-s/1.2/Service.owl#"
+    xmlns:process="http://www.daml.org/services/owl-s/1.2/Process.owl#"
+    xmlns:swrlb="http://www.w3.org/2003/11/swrlb#"
+    xmlns:list="http://www.daml.org/services/owl-s/1.2/generic/ObjectList.owl#"
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:expr="http://www.daml.org/services/owl-s/1.2/generic/Expression.owl#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:swrl="http://www.w3.org/2003/11/swrl#"
+    xmlns:grounding="http://www.daml.org/services/owl-s/1.2/Grounding.owl#"
+    xmlns:profile="http://www.daml.org/services/owl-s/1.2/Profile.owl#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+    xmlns:sitcalc="http://situationcalculus.ontology.indigolog#"
+    xmlns:time="http://www.isi.edu/~pan/damltime/time-entry.owl#"
+  xml:base="http://action.ontology.indigolog/waiterProgram">
+  <owl:Ontology rdf:about="">
+    <owl:imports rdf:resource="http://www.w3.org/2003/11/swrlb"/>
+    <owl:imports rdf:resource="http://www.w3.org/2003/11/swrl"/>
+    <owl:imports rdf:resource="http://www.daml.org/services/owl-s/1.2/Profile.owl"/>
+    <owl:imports rdf:resource="http://www.daml.org/services/owl-s/1.2/Grounding.owl"/>
+    <owl:imports rdf:resource="http://situationcalculus.ontology.indigolog"/>
+    <owl:imports rdf:resource="http://object.ontology.indigolog/waiterProgram"/>
+  </owl:Ontology>
+  <process:CompositeProcess rdf:ID="hasRequest">
+    <process:composedOf>
+      <process:Perform rdf:ID="Perform_10">
+        <process:process>
+          <process:AtomicProcess rdf:ID="hasRequest_Atomic">
+            <process:hasResult>
+              <process:Result rdf:ID="hasRequest_Result_1">
+                <process:inCondition>
+                  <expr:SWRL-Condition rdf:ID="SWRL-Condition_21">
+                    <expr:expressionBody rdf:datatype="http://www.w3.org/2001/XMLSchema#string"
+                    >(total_request&gt;0)</expr:expressionBody>
+                  </expr:SWRL-Condition>
+                </process:inCondition>
+                <process:hasResultVar>
+                  <process:ResultVar rdf:ID="ResultVar_22"/>
+                </process:hasResultVar>
+              </process:Result>
+            </process:hasResult>
+            <process:hasLocal>
+              <process:Local rdf:ID="total_request"/>
+            </process:hasLocal>
+          </process:AtomicProcess>
+        </process:process>
+      </process:Perform>
+    </process:composedOf>
+  </process:CompositeProcess>
+  <process:ControlConstructBag rdf:ID="ControlConstructBag_4">
+    <list:rest>
+      <process:ControlConstructBag rdf:ID="ControlConstructBag_5"/>
+    </list:rest>
+  </process:ControlConstructBag>
+  <process:CompositeProcess rdf:ID="waiter_program">
+    <process:composedOf>
+      <process:Repeat-While rdf:ID="Repeat-While_6">
+        <process:whileProcess>
+          <process:Sequence rdf:ID="Sequence_9">
+            <process:components>
+              <process:ControlConstructList rdf:ID="ControlConstructList_12">
+                <list:first>
+                  <process:Perform rdf:ID="Perform_11">
+                    <process:process>
+                      <process:CompositeProcess rdf:ID="fill_gripper">
+                        <process:composedOf>
+                          <process:Repeat-While rdf:ID="Repeat-While_1">
+                            <process:whileCondition>
+                              <expr:Condition rdf:ID="fill_gripper_while_condition_1">
+                                <expr:expressionLanguage rdf:resource="http://www.daml.org/services/owl-s/1.2/generic/Expression.owl#SWRL"/>
+                                <expr:expressionBody rdf:datatype=
+                                "http://www.w3.org/2001/XMLSchema#string"
+                                >(and(hasFreeArm, total_request&gt;drink_in_hand)</expr:expressionBody>
+                              </expr:Condition>
+                            </process:whileCondition>
+                            <process:whileProcess>
+                              <process:Perform rdf:ID="Perform_9">
+                                <process:process>
+                                  <process:AtomicProcess rdf:ID="grab">
+                                    <process:hasPrecondition>
+                                      <expr:SWRL-Condition rdf:ID="poss_grab">
+                                        <expr:expressionBody rdf:datatype=
+                                        "http://www.w3.org/2001/XMLSchema#string"
+                                        >(avail_arm(N)=yes)</expr:expressionBody>
+                                      </expr:SWRL-Condition>
+                                    </process:hasPrecondition>
+                                    <process:hasResult>
+                                      <process:Result rdf:ID="causes_val_grab_1">
+                                        <process:inCondition rdf:resource="http://www.daml.org/services/owl-s/1.2/generic/Expression.owl#AlwaysTrue"/>
+                                        <process:hasEffect>
+                                          <expr:SWRL-Condition rdf:ID="SWRL-Condition_8">
+                                            <expr:expressionBody
+                                             rdf:datatype="http://www.w3.org/2001/XMLSchema#string"
+                                            >(grab(N), avail_arm(N), no, true)</expr:expressionBody>
+                                          </expr:SWRL-Condition>
+                                        </process:hasEffect>
+                                      </process:Result>
+                                    </process:hasResult>
+                                    <process:hasResult>
+                                      <process:Result rdf:ID="causes_val_grab_2">
+                                        <process:hasEffect>
+                                          <expr:SWRL-Condition rdf:ID="SWRL-Condition_10">
+                                            <expr:expressionBody
+                                             rdf:datatype="http://www.w3.org/2001/XMLSchema#string"
+                                            >(grab(_), drink_in_hand, NewNum, NewNum is drink_in_hand+1)</expr:expressionBody>
+                                          </expr:SWRL-Condition>
+                                        </process:hasEffect>
+                                        <process:inCondition rdf:resource="http://www.daml.org/services/owl-s/1.2/generic/Expression.owl#AlwaysTrue"/>
+                                      </process:Result>
+                                    </process:hasResult>
+                                    <process:hasInput>
+                                      <process:Input rdf:ID="arms"/>
+                                    </process:hasInput>
+                                    <process:hasLocal>
+                                      <process:Local rdf:ID="avail_arm"/>
+                                    </process:hasLocal>
+                                  </process:AtomicProcess>
+                                </process:process>
+                              </process:Perform>
+                            </process:whileProcess>
+                          </process:Repeat-While>
+                        </process:composedOf>
+                      </process:CompositeProcess>
+                    </process:process>
+                  </process:Perform>
+                </list:first>
+                <list:rest>
+                  <process:ControlConstructList rdf:ID="ControlConstructList_15">
+                    <list:rest>
+                      <process:ControlConstructList rdf:ID="ControlConstructList_17">
+                        <list:first>
+                          <process:Perform rdf:ID="Perform_16">
+                            <process:process>
+                              <process:AtomicProcess rdf:ID="go_table">
+                                <process:hasLocal>
+                                  <process:Local rdf:ID="at_table"/>
+                                </process:hasLocal>
+                                <process:hasResult>
+                                  <process:Result rdf:ID="causes_val_go_table_1">
+                                    <process:inCondition rdf:resource="http://www.daml.org/services/owl-s/1.2/generic/Expression.owl#AlwaysTrue"/>
+                                    <process:hasEffect>
+                                      <expr:SWRL-Condition rdf:ID="SWRL-Condition_2">
+                                        <expr:expressionBody rdf:datatype=
+                                        "http://www.w3.org/2001/XMLSchema#string"
+                                        >(go_table(N), at_table(N), yes, true)</expr:expressionBody>
+                                      </expr:SWRL-Condition>
+                                    </process:hasEffect>
+                                  </process:Result>
+                                </process:hasResult>
+                                <process:hasResult>
+                                  <process:Result rdf:ID="causes_val_go_table_2">
+                                    <process:hasEffect>
+                                      <expr:SWRL-Condition rdf:ID="SWRL-Condition_3">
+                                        <expr:expressionBody rdf:datatype=
+                                        "http://www.w3.org/2001/XMLSchema#string"
+                                        >(go_table(_), at_table(_), no, true)</expr:expressionBody>
+                                      </expr:SWRL-Condition>
+                                    </process:hasEffect>
+                                    <process:inCondition rdf:resource="http://www.daml.org/services/owl-s/1.2/generic/Expression.owl#AlwaysTrue"/>
+                                  </process:Result>
+                                </process:hasResult>
+                                <process:hasPrecondition>
+                                  <expr:SWRL-Condition rdf:ID="poss_go_table">
+                                    <expr:expressionBody rdf:datatype=
+                                    "http://www.w3.org/2001/XMLSchema#string"
+                                    >(at_table(N)=no)</expr:expressionBody>
+                                  </expr:SWRL-Condition>
+                                </process:hasPrecondition>
+                                <process:hasInput>
+                                  <process:Input rdf:ID="table"/>
+                                </process:hasInput>
+                              </process:AtomicProcess>
+                            </process:process>
+                          </process:Perform>
+                        </list:first>
+                        <list:rest rdf:resource="http://www.daml.org/services/owl-s/1.2/generic/ObjectList.owl#nil"/>
+                      </process:ControlConstructList>
+                    </list:rest>
+                    <list:first>
+                      <process:Perform rdf:ID="Perform_14">
+                        <process:process>
+                          <process:CompositeProcess rdf:ID="serve_tables">
+                            <process:composedOf>
+                              <process:Repeat-While rdf:ID="Repeat-While_5">
+                                <process:whileCondition>
+                                  <expr:Condition rdf:ID="serve_tables_while_condition_1">
+                                    <expr:expressionLanguage rdf:resource="http://www.daml.org/services/owl-s/1.2/generic/Expression.owl#SWRL"/>
+                                    <expr:expressionBody rdf:datatype=
+                                    "http://www.w3.org/2001/XMLSchema#string"
+                                    >(hasDrink)</expr:expressionBody>
+                                  </expr:Condition>
+                                </process:whileCondition>
+                                <process:whileProcess>
+                                  <process:Sequence rdf:ID="Sequence_12">
+                                    <process:components>
+                                      <process:ControlConstructList rdf:ID="ControlConstructList_14">
+                                        <list:first>
+                                          <process:Perform rdf:ID="Perform_13">
+                                            <process:process>
+                                              <process:CompositeProcess rdf:ID="next_table_to_serve">
+                                                <process:composedOf>
+                                                  <process:Perform rdf:ID="Perform_3">
+                                                    <process:process>
+                                                      <process:AtomicProcess rdf:ID="next_table_to_serve_Atomic">
+                                                        <process:hasResult>
+                                                          <process:Result rdf:ID="next_table_to_serve_Result_1">
+                                                            <process:inCondition>
+                                                              <expr:SWRL-Condition rdf:ID="SWRL-Condition_11">
+    <expr:expressionBody rdf:datatype="http://www.w3.org/2001/XMLSchema#string"
+    >(n_of_d_to_serve(table(Loc))&gt;0)</expr:expressionBody> </expr:SWRL-Condition>
+                                                            </process:inCondition>
+                                                            <process:hasResultVar>
+                                                              <process:ResultVar rdf:ID="ResultVar_12"/>
+                                                            </process:hasResultVar>
+                                                          </process:Result>
+                                                        </process:hasResult>
+                                                        <process:hasLocal>
+                                                          <process:Local rdf:ID="n_of_d_to_serve"/>
+                                                        </process:hasLocal>
+                                                      </process:AtomicProcess>
+                                                    </process:process>
+                                                  </process:Perform>
+                                                </process:composedOf>
+                                              </process:CompositeProcess>
+                                            </process:process>
+                                          </process:Perform>
+                                        </list:first>
+                                        <list:rest>
+                                          <process:ControlConstructList rdf:ID="ControlConstructList_16">
+                                            <list:rest>
+                                              <process:ControlConstructList rdf:ID="ControlConstructList_18">
+                                                <list:first>
+                                                  <process:Perform rdf:ID="Perform_17">
+                                                    <process:process>
+                                                      <process:CompositeProcess rdf:ID="off_load">
+                                                        <process:composedOf>
+                                                          <process:Repeat-While rdf:ID="Repeat-While_3">
+                                                            <process:whileProcess>
+                                                              <process:Perform rdf:ID="Perform_5">
+    <process:process>
+      <process:AtomicProcess rdf:ID="putdown">
+        <process:hasLocal rdf:resource="#avail_arm"/>
+        <process:hasResult>
+          <process:Result rdf:ID="causes_val_putdown_4">
+            <process:inCondition rdf:resource="http://www.daml.org/services/owl-s/1.2/generic/Expression.owl#AlwaysTrue"/>
+            <process:hasEffect>
+              <expr:SWRL-Condition rdf:ID="SWRL-Condition_5">
+                <expr:expressionBody rdf:datatype="http://www.w3.org/2001/XMLSchema#string"
+                >(putdown(_, _), drink_in_hand, NewNum, NewNum is drink_in_hand-1)</expr:expressionBody>
+              </expr:SWRL-Condition>
+            </process:hasEffect>
+          </process:Result>
+        </process:hasResult>
+        <process:hasResult>
+          <process:Result rdf:ID="causes_val_putdown_3">
+            <process:inCondition rdf:resource="http://www.daml.org/services/owl-s/1.2/generic/Expression.owl#AlwaysTrue"/>
+            <process:hasEffect>
+              <expr:SWRL-Condition rdf:ID="SWRL-Condition_4">
+                <expr:expressionBody rdf:datatype="http://www.w3.org/2001/XMLSchema#string"
+                >(putdown(_, Loc), n_of_d_to_serve(table(Loc)), NewNum, NewNum is n_of_d_to_serve(table(Loc))-1)</expr:expressionBody>
+              </expr:SWRL-Condition>
+            </process:hasEffect>
+          </process:Result>
+        </process:hasResult>
+        <process:hasInput rdf:resource="#table"/>
+        <process:hasLocal rdf:resource="#n_of_d_to_serve"/>
+        <process:hasPrecondition>
+          <expr:SWRL-Condition rdf:ID="poss_putdown">
+            <expr:expressionBody rdf:datatype="http://www.w3.org/2001/XMLSchema#string"
+            >(avail_arm(Arm)=no)</expr:expressionBody>
+          </expr:SWRL-Condition>
+        </process:hasPrecondition>
+        <process:hasLocal>
+          <process:Local rdf:ID="drink_in_hand"/>
+        </process:hasLocal>
+        <process:hasResult>
+          <process:Result rdf:ID="causes_val_putdown_1">
+            <process:inCondition rdf:resource="http://www.daml.org/services/owl-s/1.2/generic/Expression.owl#AlwaysTrue"/>
+            <process:hasEffect>
+              <expr:SWRL-Condition rdf:ID="SWRL-Condition_6">
+                <expr:expressionBody rdf:datatype="http://www.w3.org/2001/XMLSchema#string"
+                >(putdown(Arm, _), avail_arm(Arm), yes, true)</expr:expressionBody>
+              </expr:SWRL-Condition>
+            </process:hasEffect>
+          </process:Result>
+        </process:hasResult>
+        <process:hasLocal rdf:resource="#total_request"/>
+        <process:hasResult>
+          <process:Result rdf:ID="causes_val_putdown_2">
+            <process:hasEffect>
+              <expr:SWRL-Condition rdf:ID="SWRL-Condition_1">
+                <expr:expressionBody rdf:datatype="http://www.w3.org/2001/XMLSchema#string"
+                >(putdown(_, _), total_request, NewNum, NewNum is total_request-1)</expr:expressionBody>
+              </expr:SWRL-Condition>
+            </process:hasEffect>
+            <process:inCondition rdf:resource="http://www.daml.org/services/owl-s/1.2/generic/Expression.owl#AlwaysTrue"/>
+          </process:Result>
+        </process:hasResult>
+        <process:hasInput rdf:resource="#arms"/>
+      </process:AtomicProcess>
+    </process:process>                                        </process:Perform>
+                                                            </process:whileProcess>
+                                                            <process:whileCondition>
+                                                              <expr:Condition rdf:ID="off_load_while_condition_1">
+    <expr:expressionBody rdf:datatype="http://www.w3.org/2001/XMLSchema#string"
+    >(and(n_of_d_to_serve(table(Loc))&gt;0, hasDrink)</expr:expressionBody>
+    <expr:expressionLanguage rdf:resource="http://www.daml.org/services/owl-s/1.2/generic/Expression.owl#SWRL"/>
+                                                              </expr:Condition>
+                                                            </process:whileCondition>
+                                                          </process:Repeat-While>
+                                                        </process:composedOf>
+                                                      </process:CompositeProcess>
+                                                    </process:process>
+                                                  </process:Perform>
+                                                </list:first>
+                                                <list:rest rdf:resource="http://www.daml.org/services/owl-s/1.2/generic/ObjectList.owl#nil"/>
+                                              </process:ControlConstructList>
+                                            </list:rest>
+                                            <list:first>
+                                              <process:Perform rdf:ID="Perform_15">
+                                                <process:process rdf:resource="#go_table"/>
+                                              </process:Perform>
+                                            </list:first>
+                                          </process:ControlConstructList>
+                                        </list:rest>
+                                      </process:ControlConstructList>
+                                    </process:components>
+                                  </process:Sequence>
+                                </process:whileProcess>
+                              </process:Repeat-While>
+                            </process:composedOf>
+                          </process:CompositeProcess>
+                        </process:process>
+                      </process:Perform>
+                    </list:first>
+                  </process:ControlConstructList>
+                </list:rest>
+              </process:ControlConstructList>
+            </process:components>
+          </process:Sequence>
+        </process:whileProcess>
+        <process:whileCondition>
+          <expr:Condition rdf:ID="waiter_program_while_condition_1">
+            <expr:expressionLanguage rdf:resource="http://www.daml.org/services/owl-s/1.2/generic/Expression.owl#SWRL"/>
+            <expr:expressionBody rdf:datatype="http://www.w3.org/2001/XMLSchema#string"
+            >(hasRequest)</expr:expressionBody>
+          </expr:Condition>
+        </process:whileCondition>
+      </process:Repeat-While>
+    </process:composedOf>
+  </process:CompositeProcess>
+  <process:AtomicProcess rdf:ID="request">
+    <process:hasLocal rdf:resource="#total_request"/>
+    <process:hasLocal rdf:resource="#n_of_d_to_serve"/>
+    <process:hasResult>
+      <process:Result rdf:ID="causes_val_request_2">
+        <process:inCondition rdf:resource="http://www.daml.org/services/owl-s/1.2/generic/Expression.owl#AlwaysTrue"/>
+        <process:hasEffect>
+          <expr:SWRL-Condition rdf:ID="SWRL-Condition_9">
+            <expr:expressionBody rdf:datatype="http://www.w3.org/2001/XMLSchema#string"
+            >(request(table(_), Num), total_request, NewNum, NewNum = total_request + Num)</expr:expressionBody>
+          </expr:SWRL-Condition>
+        </process:hasEffect>
+      </process:Result>
+    </process:hasResult>
+    <process:hasResult>
+      <process:Result rdf:ID="causes_val_request_1">
+        <process:inCondition rdf:resource="http://www.daml.org/services/owl-s/1.2/generic/Expression.owl#AlwaysTrue"/>
+        <process:hasEffect>
+          <expr:SWRL-Condition rdf:ID="SWRL-Condition_7">
+            <expr:expressionBody rdf:datatype="http://www.w3.org/2001/XMLSchema#string"
+            >(request(table(N), Num), n_of_d_to_serve(table(N)), NewNum, NewNum = Num + n_of_d_to_serve(table(N)))</expr:expressionBody>
+          </expr:SWRL-Condition>
+        </process:hasEffect>
+      </process:Result>
+    </process:hasResult>
+    <process:hasInput rdf:resource="#table"/>
+  </process:AtomicProcess>
+  <process:Sequence rdf:ID="Sequence_7">
+    <process:components>
+      <process:ControlConstructList rdf:ID="ControlConstructList_8"/>
+    </process:components>
+  </process:Sequence>
+  <rdf:Description rdf:ID="CompositeProcess_1">
+    <process:composedOf>
+      <process:Repeat-While rdf:ID="Repeat-While_2"/>
+    </process:composedOf>
+  </rdf:Description>
+  <process:CompositeProcess rdf:ID="hasFreeArm">
+    <process:composedOf>
+      <process:Perform rdf:ID="Perform_8">
+        <process:process>
+          <process:AtomicProcess rdf:ID="hasFreeArm_Atomic">
+            <process:hasLocal rdf:resource="#avail_arm"/>
+            <process:hasResult>
+              <process:Result rdf:ID="hasFreeArm_Result_1">
+                <process:inCondition>
+                  <expr:SWRL-Condition rdf:ID="SWRL-Condition_14">
+                    <expr:expressionBody rdf:datatype="http://www.w3.org/2001/XMLSchema#string"
+                    >(some(n, avail_arm(n)=yes))</expr:expressionBody>
+                  </expr:SWRL-Condition>
+                </process:inCondition>
+                <process:hasResultVar>
+                  <process:ResultVar rdf:ID="ResultVar_13"/>
+                </process:hasResultVar>
+              </process:Result>
+            </process:hasResult>
+          </process:AtomicProcess>
+        </process:process>
+      </process:Perform>
+    </process:composedOf>
+  </process:CompositeProcess>
+  <process:AtomicProcess rdf:ID="show_error">
+    <process:hasPrecondition rdf:resource="#poss_putdown"/>
+    <process:hasResult>
+      <process:Result rdf:ID="show_error_Result_1">
+        <process:withOutput>
+          <process:OutputBinding rdf:ID="show_error_OutputBinding_1">
+            <process:toParam>
+              <process:Output rdf:ID="failureNotice"/>
+            </process:toParam>
+          </process:OutputBinding>
+        </process:withOutput>
+      </process:Result>
+    </process:hasResult>
+  </process:AtomicProcess>
+  <process:CompositeProcess rdf:ID="hasDrink">
+    <process:composedOf>
+      <process:Perform rdf:ID="Perform_6">
+        <process:process>
+          <process:AtomicProcess rdf:ID="hasDrink_Atomic">
+            <process:hasLocal rdf:resource="#avail_arm"/>
+            <process:hasResult>
+              <process:Result rdf:ID="hasDrink_Result_1">
+                <process:hasResultVar>
+                  <process:ResultVar rdf:ID="ResultVar_18"/>
+                </process:hasResultVar>
+                <process:inCondition>
+                  <expr:SWRL-Condition rdf:ID="SWRL-Condition_17">
+                    <expr:expressionBody rdf:datatype="http://www.w3.org/2001/XMLSchema#string"
+                    ></expr:expressionBody>
+                  </expr:SWRL-Condition>
+                </process:inCondition>
+              </process:Result>
+            </process:hasResult>
+          </process:AtomicProcess>
+        </process:process>
+      </process:Perform>
+    </process:composedOf>
+  </process:CompositeProcess>
+</rdf:RDF>
+
+<!-- Created with Protege (with OWL Plugin 3.5, Build 663)  http://protege.stanford.edu -->

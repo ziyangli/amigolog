@@ -1,0 +1,16 @@
+file:/home/jwcjdenissen/protegeworkspace/Profile.owl?forceReadOnly=true
+file:/home/jwcjdenissen/protegeworkspace/ObjectList.owl?forceReadOnly=true
+file:/home/jwcjdenissen/protegeworkspace/Expression.owl?forceReadOnly=true
+file:/home/jwcjdenissen/protegeworkspace/Service.owl?forceReadOnly=true
+file:/home/jwcjdenissen/protegeworkspace/Process.owl?forceReadOnly=true
+file:/home/jwcjdenissen/protegeworkspace/Grounding.owl?forceReadOnly=true
+[Dublin Core DL Redirect]
+http://www.daml.org/services/owl-s/1.2/Grounding.owl
+http://www.daml.org/services/owl-s/1.2/Process.owl
+http://www.daml.org/services/owl-s/1.2/Service.owl
+http://www.daml.org/services/owl-s/1.2/generic/Expression.owl
+http://www.daml.org/services/owl-s/1.2/generic/ObjectList.owl
+http://www.daml.org/services/owl-s/1.2/Profile.owl
+file:/home/jwcjdenissen/rossandbox/ontology/sitcalc.owl?forceReadOnly=false
+file:/home/jwcjdenissen/rossandbox/ontology/objectswaiterProgram.owl?forceReadOnly=false
+file:/home/jwcjdenissen/plugins/com.sri.owlseditor/owl-s?forceReadOnly=true&Recursive=true

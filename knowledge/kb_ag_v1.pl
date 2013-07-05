@@ -10,8 +10,7 @@
 
 :- multifile 
 		indigolog_action/1,
-		got_sensing/2,
-		executing_action/1.
+                executing_action/1.
 
 % !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 % !!!!!!!!!!!!!!!!!! COMMENT WHEN CONNECTION WITH INDIGOLOG IS USED !!!!!!!!!!!!!!!!!!!
@@ -30,35 +29,36 @@
 
 % get_action_input just looks how many inputs are given in the action and will put them in a list Action_input. 
 % This way easier to handle within Python
-get_action_input(Action_with_inputs, Action, Action_input) :- 
-	Action_with_inputs =.. [Action,I1],
-	%I1 \= [H|T], % should NOT be a list
-	Action_input = [I1];
-	Action_with_inputs =.. [Action,I1,I2],
-	Action_input = [I1,I2];
-	Action_with_inputs =.. [Action,I1,I2,I3],
-	Action_input = [I1,I2,I3];
-	Action_with_inputs =.. [Action,I1,I2,I3,I4],
-	Action_input = [I1,I2,I3,I4];
-	Action_with_inputs =.. [Action,I1,I2,I3,I4,I5],
-	Action_input = [I1,I2,I3,I4,I5];
-	Action_with_inputs =.. [Action,I1,I2,I3,I4,I5,I6],
-	Action_input = [I1,I2,I3,I4,I5,I6];
-	Action_with_inputs =.. [Action,I1,I2,I3,I4,I5,I6,I7],
-	Action_input = [I1,I2,I3,I4,I5,I6,I7];
-	Action_with_inputs =.. [Action,I1,I2,I3,I4,I5,I6,I7,I8],
-	Action_input = [I1,I2,I3,I4,I6,I6,I7,I8].
+get_action_input(Action_with_inputs, Action, Action_input) :-
+        Action_with_inputs =.. [Action|Action_input].
+	% Action_with_inputs =.. [Action,I1],
+	% %I1 \= [H|T], % should NOT be a list
+	% Action_input = [I1];
+	% Action_with_inputs =.. [Action,I1,I2],
+	% Action_input = [I1,I2];
+	% Action_with_inputs =.. [Action,I1,I2,I3],
+	% Action_input = [I1,I2,I3];
+	% Action_with_inputs =.. [Action,I1,I2,I3,I4],
+	% Action_input = [I1,I2,I3,I4];
+	% Action_with_inputs =.. [Action,I1,I2,I3,I4,I5],
+	% Action_input = [I1,I2,I3,I4,I5];
+	% Action_with_inputs =.. [Action,I1,I2,I3,I4,I5,I6],
+	% Action_input = [I1,I2,I3,I4,I5,I6];
+	% Action_with_inputs =.. [Action,I1,I2,I3,I4,I5,I6,I7],
+	% Action_input = [I1,I2,I3,I4,I5,I6,I7];
+	% Action_with_inputs =.. [Action,I1,I2,I3,I4,I5,I6,I7,I8],
+	% Action_input = [I1,I2,I3,I4,I6,I6,I7,I8].
 
-get_action(Action,Action_input) :-                                                                                                          
-	% Be aware that if more than 8 inputs are used, change this in get_action_input predicate
+get_action(Action,Action_input) :-
+        %% Be aware that if more than 8 inputs are used, change this in get_action_input predicate
 	executing_action(Action_with_inputs),
 	get_action_input(Action_with_inputs,Action,Action_input).
 
-
-% Outcome 'failed' repeats action for now, otherwise success is assumed.
+%% Outcome 'failed' repeats action for now, otherwise success is assumed.
 assert_done(Outcome) :-
 	executing_action(Action_with_inputs),
-	assert(got_sensing(Action_with_inputs, Outcome)). %% wait until get sensing Result
+	thread_send_message(indigolog_thread, got_sensing(Action_with_inputs, Outcome)). %% wait until get sensing Result
+
 
 %% get_action(Action,Action_input) :-                                                                                                          
 %% 	% Be aware that if more than 8 inputs are used, change this in get_action_input predicate

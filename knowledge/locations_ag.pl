@@ -71,6 +71,7 @@ waypoint(robotics_testlab_A, _, meeting_point(b), pose_2d(1.601, 0.512, -1.9)).
 waypoint(robotics_testlab_A, _, meeting_point(c), pose_2d(0.764, 0.139, -1.6)). 
 waypoint(robotics_testlab_A, _, meeting_point(d), pose_2d(1.781, 0.023, -2.6)). 
 
+
 waypoint(robotics_testlab_A, _, exit,                pose_2d(0,       0, -3.14)).
 
 % QUESTION: Who uses one of these exits?

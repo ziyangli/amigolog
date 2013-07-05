@@ -149,10 +149,19 @@ poss(perception_recognition(laser_2d, _, _, _, _), true).
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% MIGRATION OF STATEMACHINE
 
-proc(demo_seq_test, [navigate_generic(goal_pose_2d, 2,0, 3), spindle(medium, 10)]).
 
-proc(demo_query_test, [query(object_roi(coke-1, X, Y, Z), _), navigate_generic(goal_pose_2d, X, Y, Z)]).
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% QUERY
+obj_loc_Q(X, Y, Z) :-
+	property_expected(ObjectID, position, in_front_of(amigo)),
+	property_expected(ObjectID, position, [X,Y,Z]).
+
+%% proc(demo_seq_test, [navigate_generic(goal_pose_2d, 2,0, 3), spindle(medium, 10)]).
+
+%% proc(demo_query_test, [query(object_roi(coke-1, X, Y, Z), _), navigate_generic(goal_pose_2d, X, Y, Z)]).
+
+proc(demo_seq_test,  [head(send_goal, 1, 2, 0.9), perception_recognition(object, 3), query(obj_loc_Q(X, Y, Z), _),  navigate_generic(lookat_point_3d,X,Y,Z),  spindle(send_goal,5,Z), head(send_goal, X, Y, Z), perception_recognition(object, 3), query(obj_loc_Q(Nx, Ny, Nz), _),  arm(to_pre_grasp_point,right,Nx,Ny,Nz),  set_gripper(right, open),  arm(grasp,right,Nx,Ny,Nz), set_gripper(right, close), arm(retract, right)]).  
 % %%% Migration of Find object and Grasp object state machine
 
 % :-dynamic object_loc/4.
