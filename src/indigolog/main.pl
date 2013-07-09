@@ -64,6 +64,7 @@ roll_parameters(5, 10, 2).
 
 prim_fluent(test_counter).
 initially(test_counter, 0).
+%% currently(test_counter, 0).
 cache(test_counter).
 
 prim_action(add_count).

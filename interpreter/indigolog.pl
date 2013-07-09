@@ -545,22 +545,6 @@ trans(followpath(E,[E,H,E1,H1|L]),H,followpath(E1,[E1,H1|L]),H1) :- !.
 trans(followpath(E,_),H,E1,H1) :- trans(search(E),H,E1,H1). /* redo search */
 
 
-%% -- wndet(E1,E2)
-%%    Weak nondeterministic choice of program
-%%    try to execute program E1 first. If impossible, then try program E2 instead
-final(wndet(E1,E2),H)      :- final(E1,H), final(E2,H). %% If E1 is not final, then E1 can 'trans'
-trans(wndet(E1,E2),H,E,H1) :- trans(E1,H,E,H1) -> true ; trans(E2,H,E,H1).
-
-%% -- rndet(E1,E2)
-%%    real nondeterministic choice of program
-%%    simulate random choice in a nondeterministc choice of programs
-final(rndet(E1,E2),H):- final(E1,H); final(E2,H). %% Note: if final config exist, no trans will happen
-trans(rndet(E1,E2),H,E,H1):- 
-        random(1,10,R), %% flip a coin!
-	(R>5 ->
-            (trans(E1,H,E,H1); trans(E2,H,E,H1));
-            (trans(E2,H,E,H1); trans(E1,H,E,H1))).
-
 %% -- rconc(E1,E2)
 %%    real concurrency on 2 programs
 %%    simulate random choice in a concurrent execution of E1 and E2
@@ -657,8 +641,6 @@ trans(bpconc(E1,E2,_),H,E,H1) :- trans(pconc(E1,E2),H,E,H1).
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% GOLOG CONSTRUCTS
 
-final(ndet(E1,E2),H) :- final(E1,H) ; final(E2,H).
-
 final(if(P,E1,E2),H) :- ground(P), !, (holds(P,H) -> final(E1,H) ; final(E2,H)).
 final(if(P,E1,_),H)  :- holds(P,H), final(E1,H).
 final(if(P,_,E2),H)  :- holds(neg(P),H), final(E2,H).
@@ -680,8 +662,25 @@ final(E,H)           :- proc(E,E2), !, final(E2,H).
 final([E|L],H)       :- final(E,H), final(L,H).
 final([],_).
 
+
 trans(?(P),H,[],H)            :- holds(P,H).
-trans(ndet(E1,E2),H,E,H1)     :- trans(E1,H,E,H1) ; trans(E2,H,E,H1).
+
+%% -- wndet(E1,E2)
+%%    Weak nondeterministic choice of program
+%%    try to execute program E1 first. If impossible, then try program E2 instead
+final(wndet(E1,E2),H)      :- final(E1,H), final(E2,H). %% If E1 is not final, then E1 can 'trans'
+trans(wndet(E1,E2),H,E,H1) :- trans(E1,H,E,H1) -> true ; trans(E2,H,E,H1).
+
+%% -- ndet(E1,E2)
+%%    nondeterministic choice of a program that trans
+%%    Note: if final config exist, no trans will happen
+final(ndet(E1,E2),H)          :- final(E1,H); final(E2,H). 
+trans(ndet(E1,E2),H,E,H1)     :- 
+        random(1,10,R), %% flip a coin!
+	(R>5 ->
+            (trans(E1,H,E,H1); trans(E2,H,E,H1));
+            (trans(E2,H,E,H1); trans(E1,H,E,H1))).
+
 
 trans(if(P,E1,E2),H,E,H1)     :-
         ground(P), !, (holds(P,H) -> trans(E1,H,E,H1) ;  trans(E2,H,E,H1)).
@@ -705,33 +704,36 @@ trans(star(E),H,[E1,star(E)],H1)       :- trans(E,H,E1,H1).
 trans([E|L],H,[E1|L],H2)  :- trans(E,H,E1,H2).
 trans([E|L],H,E1,H2)      :- \+ L=[], final(E,H), trans(L,H,E1,H2).
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% LAST TRANS FOR PROCEDURES AND PRIMITIVE ACTIONS (everything else failed)
-% Replace the arguments by their value, check that it is a primitive action
-% and finally check for preconditions.
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-trans(E,H,E1,H1)    :- proc(E,E2), !, trans(E2,H,E1,H1).
+%% LAST TRANS FOR PROCEDURES AND PRIMITIVE ACTIONS (everything else failed)
+%% Replace the arguments(fluents) by their value, check if it is a primitive action
+%% and finally check for preconditions.
 
-%% Check if A has "the form" of a primitive action, though, its arguments
-% may need to be evaluated yet
-% We need to do  this hack because actions are defined all ground
-is_an_action(A):- \+ \+ (prim_action(A) ; exog_action(A)), !.
-is_an_action(A):- \+ atomic(A),
-	           A =..[F|Arg], length(Arg,LArg), length(ArgV,LArg),
-                   NA =..[F|ArgV], (prim_action(NA) ; exog_action(A)).
+%% -- in_pmAct_form(A)
+%%    check if A has "the form" of a primitive action
+%%    A can be a primitive action with unevaluated fluents as arguments
+%%    Note: the same holds for prim_fluent, fluents can have another fluent as args
+%%    like: isGold(locRobot)
+in_pmAct_form(A):-
+        liftAtom(A, _, _, LiftedA), 
+        prim_action(LiftedA), !. %% Note: LiftedA gets a grounding here
+%% -- calc_act_arg(P, P1, H)
+%%    compute the arguments of an action
+calc_act_arg(P,P1,H):-
+        atomic(P) -> P1=P;
+        (P =..[Function|LArg], subfl(LArg,LArg2,H), 
+            P1=..[Function|LArg2]).
 
-% Computes the arguments of an action or a fluent P
-% Action/Fluent P1 is action/fluent P with all arguments evaluated 
-calc_arg(P,P1,H):- (is_an_action(P) ; prim_fluent(P)),
-	(atomic(P)-> P1=P ;
-                    (P =..[Function|LArg], subfl(LArg,LArg2,H), 
-                     P1=..[Function|LArg2])).
-
-trans(E,H,[],[E1|H])    :- 
-	calc_arg(E,E1,H),
-	prim_action(E1), 
+trans(E,H,E1,H1)     :- proc(E,E2), !, trans(E2,H,E1,H1).
+trans(E,H,[],[E1|H]) :-
+        %% Note: the [] will be added to the head of the remaining procedure
+        in_pmAct_form(E),
+	calc_act_arg(E,E1,H), %% Hope E1 gets all ground here
+	prim_action(E1), !,   %% Note: E1 gets a grounding here
 	poss(E1,P), 
 	holds(P,H).
+
+
+
 
 %% if doing_step is asserted, throw exog_action
 %% abortStep :- thread_signal(indigolog_thread, (doing_step -> throw(exog_action) ; true)).
