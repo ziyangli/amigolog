@@ -599,17 +599,6 @@ trans(wait,H,[],[wait|H])    :- !. %% wait is a no-op but encourages rolling db
 trans(commit,S,[],[commit|S]).	   %% commit to the plan found so far! 
 trans(abort,S,[],[abort|S]).	   %% completely abort execution
 
-%% -- rpi(X,D)
-%%    real nondeterministic choice of argument from D
-final(rpi([],_,E),H)  :- !, final(E,H).
-final(rpi([V|L],E),H) :- !, final(rpi(L,rpi(V,E)),H).
-final(rpi((V,D),E),H) :- !, final(rpi(V,D,E),H).
-final(rpi(V,D,E),H)   :- rdomain(W,D), subv(V,W,E,E2), !, final(E2,H).
-
-trans(rpi([],E),H,E1,H1)   :- !, trans(E,H,E1,H1).
-trans(rpi([V|L],E),H,E1,H1):- !, trans(rpi(L,rpi(V,E)),H,E1,H1).
-trans(rpi((V,D),E),H,E1,H1):- !, trans(rpi(V,D,E),H,E1,H1).
-trans(rpi(V,D,E),H,E1,H1)  :- rdomain(W,D), subv(V,W,E,E2), trans(E2,H,E1,H1).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% CONGOLOG CONSTRUCTS
@@ -638,21 +627,6 @@ trans(bpconc(E1,E2,H),H,E,H1) :- !,
     (H1=H -> E=bpconc(E1,E3,H) ; E=pconc(E1,E3)).
 trans(bpconc(E1,E2,_),H,E,H1) :- trans(pconc(E1,E2),H,E,H1).
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% GOLOG CONSTRUCTS
-
-final(if(P,E1,E2),H) :- ground(P), !, (holds(P,H) -> final(E1,H) ; final(E2,H)).
-final(if(P,E1,_),H)  :- holds(P,H), final(E1,H).
-final(if(P,_,E2),H)  :- holds(neg(P),H), final(E2,H).
-
-%% terminate when P does not hold
-final(while(P,E),H)  :- holds(neg(P),H) ; final(E,H).
-
-final(pi([],E),H)    :- !, final(E,H).
-final(pi([V|L],E),H) :- !, final(pi(L,pi(V,E)),H).
-final(pi(V,E),H)     :- !, subv(V,_,E,E2), !, final(E2,H).
-final(pi((V,D),E),H) :- !, final(pi(V,D,E),H).
-final(pi(V,D,E),H)   :- domain(W,D), subv(V,W,E,E2), !, final(E2,H).
 
 final(star(_),_).
 final(star(_,_),_).
@@ -673,7 +647,8 @@ trans(wndet(E1,E2),H,E,H1) :- trans(E1,H,E,H1) -> true ; trans(E2,H,E,H1).
 
 %% -- ndet(E1,E2)
 %%    nondeterministic choice of a program that trans
-%%    Note: if final config exist, no trans will happen
+%%    Note1: if final config exist, no trans will happen
+%%    Note2: better only use in search contruct unless the programs are primitive
 final(ndet(E1,E2),H)          :- final(E1,H); final(E2,H). 
 trans(ndet(E1,E2),H,E,H1)     :- 
         random(1,10,R), %% flip a coin!
@@ -681,18 +656,43 @@ trans(ndet(E1,E2),H,E,H1)     :-
             (trans(E1,H,E,H1); trans(E2,H,E,H1));
             (trans(E2,H,E,H1); trans(E1,H,E,H1))).
 
-
+%% -- if(P,E1,E2)
+%%    if control constuct
+%%    Note: P can be an unground rule to bind some params
+final(if(P,E1,E2),H) :- ground(P), !, (holds(P,H) -> final(E1,H) ; final(E2,H)).
+final(if(P,E1,_),H)  :- holds(P,H), final(E1,H). %% P may get gound here?
+final(if(P,_,E2),H)  :- holds(neg(P),H), final(E2,H).
 trans(if(P,E1,E2),H,E,H1)     :-
         ground(P), !, (holds(P,H) -> trans(E1,H,E,H1) ;  trans(E2,H,E,H1)).
 trans(if(P,E1,E2),H,E,H1)     :-
         !, ((holds(P,H), trans(E1,H,E,H1)) ; (holds(neg(P),H), trans(E2,H,E,H1))).
 
+%% -- while(P,E)
+%%    while construct
+%%    Note: terminate directly when P does not hold
+final(while(P,E),H)                    :- holds(neg(P),H) ; final(E,H).
 trans(while(P,E),H,[E1,while(P,E)],H1) :- holds(P,H), trans(E,H,E1,H1).
+
+%% -- rpi(X,D)
+%%    real nondeterministic choice of argument from D
+final(rpi((V,D),E),H) :- !, final(rpi(V,D,E),H).
+final(rpi(V,D,E),H)   :- rdomain(W,D), subv(V,W,E,E2), !, final(E2,H).
+trans(rpi((V,D),E),H,E1,H1):- !, trans(rpi(V,D,E),H,E1,H1).
+trans(rpi(V,D,E),H,E1,H1)  :- rdomain(W,D), subv(V,W,E,E2), trans(E2,H,E1,H1).
+
+%% -- pi
+%%    Note: trans will not check if the binding leads to final success
+%%          only make sure the binding leads to one successful trans
+final(pi([],E),H)    :- !, final(E,H).
+final(pi([V|L],E),H) :- !, final(pi(L,pi(V,E)),H).
+final(pi(V,E),H)     :- !, subv(V,_,E,E2), !, final(E2,H).
+final(pi((V,D),E),H) :- !, final(pi(V,D,E),H).
+final(pi(V,D,E),H)   :- domain(W,D), subv(V,W,E,E2), !, final(E2,H).
 
 trans(pi([],E),H,E1,H1)    :- !, trans(E,H,E1,H1).
 trans(pi([V|L],E),H,E1,H1) :- !, trans(pi(L,pi(V,E)),H,E1,H1).
+
 trans(pi((V,D),E),H,E1,H1) :- !, trans(pi(V,D,E),H,E1,H1).
-trans(pi(r(V),D,E),H,E1,H1):- !, rdomain(W,D), subv(V,W,E,E2), trans(E2,H,E1,H1).
 trans(pi(V,D,E),H,E1,H1)   :- !, domain(W,D), subv(V,W,E,E2), trans(E2,H,E1,H1).
 trans(pi(V,E),H,E1,H1)     :- subv(V,_,E,E2), !, trans(E2,H,E1,H1).
 

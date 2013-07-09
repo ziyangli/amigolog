@@ -109,4 +109,7 @@ trace_setting :-
          trace(initially/2, -all).
 %% :- trace_setting.
 
-proc(rndet_test, rndet(add_count, [add_count, add_count])).
+kuku(papa).
+prim_action(del_count).
+poss(del_count, false).
+proc(ndet_test, ndet([add_count, del_count], [add_count, add_count])).
