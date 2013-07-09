@@ -30,10 +30,10 @@ poss(set_rgb_lights(_, _, _), true).
 % prim_fluent(gripper_state(Side)) :- domain(Side, side).
 % initally(gripper_state(_), open).
 
-%% --set_gripper(+Side, +State)
-prim_action(set_gripper(Side, State)) :- domain(Side, side), domain(State, gripper_state).
-poss(set_gripper(_, _), true).
-%% causes_val(set_gripper(Side, State), gripper_state(Side), State, true).
+%% -- gripper(+Side, +State)
+prim_action(gripper(Side, State)) :- domain(Side, side), domain(State, gripper_state).
+poss(gripper(_, _), true).
+%% causes_val(gripper(Side, State), gripper_state(Side), State, true).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% ARMS
@@ -157,11 +157,21 @@ obj_loc_Q(X, Y, Z) :-
 	property_expected(ObjectID, position, in_front_of(amigo)),
 	property_expected(ObjectID, position, [X,Y,Z]).
 
+poi_Q(Target, X, Y, Z) :-
+        point_of_interest(robotics_testlab_A, _, Target, point_3d(X, Y, Z)).
+
+        
+%% -- navigate_Q(+Target, -X, -Y, -Phi)
+%%    give a Target, return loc to go
+navigate_Q(Target, X, Y, Phi) :- ! .
+        
 %% proc(demo_seq_test, [navigate_generic(goal_pose_2d, 2,0, 3), spindle(medium, 10)]).
 
 %% proc(demo_query_test, [query(object_roi(coke-1, X, Y, Z), _), navigate_generic(goal_pose_2d, X, Y, Z)]).
 
-proc(demo_seq_test,  [head(send_goal, 1, 2, 0.9), perception_recognition(object, 3), query(obj_loc_Q(X, Y, Z), _),  navigate_generic(lookat_point_3d,X,Y,Z),  spindle(send_goal,5,Z), head(send_goal, X, Y, Z), perception_recognition(object, 3), query(obj_loc_Q(Nx, Ny, Nz), _),  arm(to_pre_grasp_point,right,Nx,Ny,Nz),  set_gripper(right, open),  arm(grasp,right,Nx,Ny,Nz), set_gripper(right, close), arm(retract, right)]).  
+% spindle(send_goal_laser, 5, Z), head(send_goal, X, Y, Z), perception_recognition(laser_2d, 2, X, Y, Z),
+%% head(send_goal, 1, 2, 0.9),
+proc(demo_seq_test,  [query(poi_Q(desk_1, IX, IY, IZ), _), navigate_generic(lookat_point_3d, IX, IY, IZ), spindle(send_goal, 5, IZ), head(send_goal, IX, IY, IZ), perception_recognition(object, 2.5), query(obj_loc_Q(X, Y, Z), _), arm(prepare_grasp, left), spindle(send_goal, 5, Z), navigate_generic(prepare_grasp_orientation, left,X,Y,Z), gripper(left, open), head(reset), spindle(high, 5), arm(to_pre_grasp_point, left, X, Y, Z), arm(grasp, left, X, Y, Z), gripper(left, close), arm(lift, left), arm(retract, left), arm(carrying, left)]).  
 % %%% Migration of Find object and Grasp object state machine
 
 % :-dynamic object_loc/4.

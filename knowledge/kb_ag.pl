@@ -207,7 +207,9 @@ indigolog_plan([navigate_generic(lookat_point_3d,1, 2, 0.88), %'front' (y-offset
 
 %% Navigation
 %indigolog_plan([navigate_generic(goal_pose_2d,2,0,0)]).
-%indigolog_plan([navigate_generic(lookat_point_3d,left,4.5,2.2,0)]).
+%indigolog_plan([navigate_generic(lookat_point_3d,2.0,0,0.8)]).
+%indigolog_plan([navigate_generic(lookat_point_3d,4.5,2.2,0)]).
+%indigolog_plan([navigate_generic(lookat_point_3d,0.806845715361795,2.1867359796956563,0.5493168002464702)]).  % = coke in gazebo, difficult location
 %indigolog_plan([navigate_generic(prepare_grasp_orientation,left,1.22, -1.1, 0.8)]).
 
 %% Perception

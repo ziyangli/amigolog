@@ -545,18 +545,16 @@ trans(followpath(E,[E,H,E1,H1|L]),H,followpath(E1,[E1,H1|L]),H1) :- !.
 trans(followpath(E,_),H,E1,H1) :- trans(search(E),H,E1,H1). /* redo search */
 
 
-%% -- wndet(E1,E2) : Weak nondeterministic choice of program
+%% -- wndet(E1,E2)
+%%    Weak nondeterministic choice of program
 %%    try to execute program E1 first. If impossible, then try program E2 instead
-final(wndet(E1,E2),H)      :- final(E1,H), final(E2,H).
-
+final(wndet(E1,E2),H)      :- final(E1,H), final(E2,H). %% If E1 is not final, then E1 can 'trans'
 trans(wndet(E1,E2),H,E,H1) :- trans(E1,H,E,H1) -> true ; trans(E2,H,E,H1).
-%%final(wndet(E1,E2),H)      :- final(E1,H) ; (\+ trans(E1,H,_,H), final(E2,H)).
 
 %% -- rndet(E1,E2)
 %%    real nondeterministic choice of program
 %%    simulate random choice in a nondeterministc choice of programs
-final(rndet(E1,E2),H):- final(E1,H); final(E2,H).
-
+final(rndet(E1,E2),H):- final(E1,H); final(E2,H). %% Note: if final config exist, no trans will happen
 trans(rndet(E1,E2),H,E,H1):- 
         random(1,10,R), %% flip a coin!
 	(R>5 ->
@@ -567,7 +565,6 @@ trans(rndet(E1,E2),H,E,H1):-
 %%    real concurrency on 2 programs
 %%    simulate random choice in a concurrent execution of E1 and E2
 final(rconc(E1,E2),H) :- final(conc(E1,E2),H).
-
 trans(rconc(E1,E2),H,rconc(E11,E22),H1) :- 
         ( random(1, 3, 1) -> 	% flip a coin!
             ((trans(E1,H,E11,H1), E22=E2); (trans(E2,H,E22,H1), E11=E1));
@@ -604,7 +601,12 @@ trans(for(V,[F|L],P),H,[E1,for(V,L,P)],H1) :-
 %%    a test action like ?(P) but it leaves a test(P) mark in H
 trans(??(P),H,[],[test(P)|H]):- holds(P,H). 
 
-trans(query(P, S), H, [], H) :- call(P) -> S=true; S=failed. 
+
+%% -- query(+P, -S)
+%%    call P and return true or false
+trans(query(P, S), H, [], H) :- call(P) -> S=true; S=failed.
+
+%% trans(par(E1, E2), H, [], H1) :- trans(E1, H, [], )
 
 %% Wait and commit are two "meta" actions.
 %% wait action tells the interpreter to wait until an exogenous action arrives
@@ -625,24 +627,28 @@ trans(rpi([V|L],E),H,E1,H1):- !, trans(rpi(L,rpi(V,E)),H,E1,H1).
 trans(rpi((V,D),E),H,E1,H1):- !, trans(rpi(V,D,E),H,E1,H1).
 trans(rpi(V,D,E),H,E1,H1)  :- rdomain(W,D), subv(V,W,E,E2), trans(E2,H,E1,H1).
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% CONGOLOG CONSTRUCTS
-    /*    iconc(E)    : iterative concurrent execution of E              */
-    /*    conc(E1,E2) : concurrent (interleaved) execution of E1 and E2  */
-    /*    pconc(E1,E2): prioritized conc. execution of E1 and E2 (E1>E2) */
-    /*    bpconc(E1,E2,H): used to improve the performance of pconc(_,_) */
-    /*                                                                   */
 final(iconc(_),_).
 final(conc(E1,E2),H)  :- final(E1,H), final(E2,H).
 final(pconc(E1,E2),H) :- final(E1,H), final(E2,H).
 
+%% -- iconc(E)
+%%    iterative concurrent execution of E
+%% -- conc(E1,E2)
+%%    concurrent (interleaved) execution of E1 and E2
+%% -- pconc(E1,E2)
+%%    prioritized conc. execution of E1 and E2 (E1>E2)
 trans(iconc(E),H,conc(E1,iconc(E)),H1) :- trans(E,H,E1,H1).
 trans(conc(E1,E2),H,conc(E,E2),H1) :- trans(E1,H,E,H1).
 trans(conc(E1,E2),H,conc(E1,E),H1) :- trans(E2,H,E,H1).
 trans(pconc(E1,E2),H,E,H1) :-    % bpconc(E1,E2,H) is for when E1 blocked at H
     trans(E1,H,E3,H1) -> E=pconc(E3,E2) ; trans(bpconc(E1,E2,H),H,E,H1).
 
-% bpconc(E1,E2,H) does not reconsider process E1 as long as the history
-% remains being H (at H, E1 is already known to be blocked)
+%% -- bpconc(E1,E2,H)
+%%    used to improve the performance of pconc(_,_)
+%%    does not reconsider process E1 as long as the history
+%%     remains being H (at H, E1 is already known to be blocked)
 trans(bpconc(E1,E2,H),H,E,H1) :- !,
     trans(E2,H,E3,H1),  % blocked history H
     (H1=H -> E=bpconc(E1,E3,H) ; E=pconc(E1,E3)).
@@ -657,6 +663,7 @@ final(if(P,E1,E2),H) :- ground(P), !, (holds(P,H) -> final(E1,H) ; final(E2,H)).
 final(if(P,E1,_),H)  :- holds(P,H), final(E1,H).
 final(if(P,_,E2),H)  :- holds(neg(P),H), final(E2,H).
 
+%% terminate when P does not hold
 final(while(P,E),H)  :- holds(neg(P),H) ; final(E,H).
 
 final(pi([],E),H)    :- !, final(E,H).

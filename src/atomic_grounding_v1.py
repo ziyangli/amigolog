@@ -40,7 +40,8 @@ def init_retract_facts(self):
     ##Load database
     rospy.loginfo("[AG] UNCOMMENT LOADING DATABASE OF INDIGOLOG IF INDIGOLOG IS USED")
 
-    self.reasoner.query(Compound("load_database","tue_owls_indigolog_exec",'knowledge/kb_ag_v1.pl'))
+    self.reasoner.query(Compound("load_database","tue_owls_indigolog_exec",'knowledge/kb_ag.pl'))
+    self.reasoner.query(Compound("load_database", "tue_owls_indigolog_exec", 'knowledge/locations_ag.pl'))
     rospy.loginfo("[AG] Database loaded")
 
     self.reasoner.query(Compound("load_database","tue_owls_indigolog_exec",'src/indigolog/main.pl'))
@@ -209,7 +210,7 @@ def execute(self, action, action_input=None):
             self.head.send_goal(lookat_point)
 
         # Check if correct action names have been used:
-        if not head_action == "reset" or head_action == "send_goal":
+        if not (head_action == "reset" or head_action == "send_goal"):
             rospy.logwarn("[AG] Head action name is wrong! Have a look at it!")
 
     ### SPINDLE ###
@@ -413,7 +414,5 @@ if __name__ == "__main__":
             robot.reasoner.query(Compound("assert_done", "success"))
 
             rospy.loginfo("[AG] Ready for next action")
-
-            #robot.reasoner.query("util_next")
 
         rospy.sleep(1)

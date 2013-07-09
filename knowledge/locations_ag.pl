@@ -98,7 +98,7 @@ point_of_interest(robotics_testlab_A, _, bed_1,             point_3d(5.009, -1.7
 point_of_interest(robotics_testlab_A, _, bed_2,             point_3d(5.009, -1.706, 0.600)).
 point_of_interest(robotics_testlab_A, _, bed_cabinet_1,     point_3d(3.729, -2.286, 0.700)).
 point_of_interest(robotics_testlab_A, _, dinner_table_1,    point_3d(0.0,   -1.0,   1.000)).
-point_of_interest(robotics_testlab_A, _, desk_1,		    point_3d(1.80,   -1.0,   0.88)).
+point_of_interest(robotics_testlab_A, _, desk_1,		    point_3d(1.3,   -1.0,   0.88)).
 point_of_interest(robotics_testlab_A, _, couch_table_1,     point_3d(0.5,    1.0,   0.500)).
 point_of_interest(robotics_testlab_A, _, couch_table_2,     point_3d(1.0,    1.0,   0.500)).
 point_of_interest(robotics_testlab_A, _, lounge_chair_1,    point_3d(1.0,    1.77,  1.000)).

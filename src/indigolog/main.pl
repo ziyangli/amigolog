@@ -97,8 +97,8 @@ proc(trans_final_test, [star(add_count), star(go_table(1)), star(go_table(2))]).
 % kuku_test2(I) :- show_kuku(a, V), V=I.
 
 trace_setting :-
-        spy(mayEvolve),
-        spy(final), 
+%       spy(mayEvolve),
+%       spy(final), 
         trace(mayEvolve),
         trace(indigo2), 
         trace(holds), 
@@ -106,5 +106,6 @@ trace_setting :-
          trace(final),
          trace(has_val/3, -all),
          trace(initially/2, -all).
-% :- trace_setting.
+%% :- trace_setting.
 
+proc(rndet_test, rndet(add_count, [add_count, add_count])).
