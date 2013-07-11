@@ -1,5 +1,5 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% FILE    : indigolog-vanilla.pl
+% FILE    : indigolog.pl
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %
 %  In addition to a (Con)Golog program, users provide these predicates:
@@ -20,79 +20,41 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 :- dynamic
+        doing_step/0, %% flag to show a step is being calculated
+        pause_step/0, %% flag to show a step is paused
+        wait_at_action/1, %% wait some seconds after EACH action
+
+        indi_exog/1, %% store exog events not managed yet
+        
         senses/1,
         senses/5, 
         senses/2,
-        indi_exog/1, % store exog events not managed yet
-        now/1,       % store actual history
-        rollednow/1, % part of th actual history that has been rolled
-        wait_at_action/1, % wait some seconds after EACH action
-        
-        protectHistory/1, % TODO: protect a history to avoid rolling
-        pause_step/0. % flag to show a step is paused
-        
-:-
-        multifile(set_option/1),
-        multifile(set_option/2),
-        multifile(exog_action/1),
-        multifile(system_action/1).
-        
-%% added by ziyang
-:-dynamic
+
         indigolog_plan/1, 
-        indigolog_action/1, 
-        num_of_actions/1.
 
+        currently/2, 
+        has_valc/3,  %% store cached fluent (F, V, H)
+        
+        now/1,       %% store actual history
+        rollednow/1, %% part of th actual history that has been rolled
+        temp/2,      %% Temporal predicate used for rolling forward
 
-assertz_plan(Plan) :-
-	retractall(indigolog_plan(_)), retractall(num_of_actions(_)),
-	%% reverse(Plan, Plan_rev),
-	assertz(indigolog_plan(Plan)),
-	length(Plan, NOA), assertz(num_of_actions(NOA)).
+        protectHistory/1. %% TODO: protect a history to avoid rolling, used in search?
+        
+:- multifile
+        set_option/1,
+        set_option/2,
 
-read_action(Act) :-
-	thread_get_message(Act).
-
-plan_done(ID) :- write('Plan Done and '), write(ID), write(' exited!').
-
-reset_indigolog_dbs :-
-        retractall(doing_step),
-        retractall(indi_exog(_)),
-        %% retractall(protectHistory(_)),
-        retractall(rollednow(_)),
-        retractall(now(_)),
-        update_now([]),
-        assert(rollednow([])).
-
-initialize :-
-        retractall(currently(_, _)),
-        forall(initially(F, V), assert(currently(F, V))), 
-        clean_cache, %% clean has_valc/2
-        reset_indigolog_dbs,
-        refresh_counter.
-
-finalize.
-
-%% Mapping
-:- dynamic
-        settles/5,
-        rejects/5.
-
-%%    causes_val like predicates, define effects of sensing actions
-%% -- rejects(+SensingAct, +SensedResult, +Fluent, +Value, +Condition)
-%%    If Condition holds and SensingAct gets SensedResult, then Fluent does not
-%%    get Value
-%%    reject(smell, 0, locWumpus, Y, adj(locRobot, Y)) means if smell gets 0 as result,
-%%    then ALL the adjcent location Y of locRobot can not be location of the Wumpus.
-%% -- settles(+SensingAct, +SensedResult, +Fluent, +Value, +Condition)
-%%    settles(senseGold, 1, isGold(L), true, L=locRobot).
+        exog_action/1,
+        system_action/1,
+        
+        initially/2.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 :- ensure_loaded(data_util).
 %% :- ensure_loaded(sysexog). %% load the system exog events
 :- ensure_loaded(sys_util).
-
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% TOP LEVEL MAIN CYCLE
@@ -101,51 +63,11 @@ finalize.
 %%    The history H is a list of actions (prim or exog), initially [] (empty)
 %%    Sensing reports are inserted as actions of the form e(fluent,value)
 
-:- dynamic
-        doing_step/0. %% flag to show a step is being calculated
-
-%% -- predicate to prepare everything for computing the next single step.
-%%    diable gc to speed up
-prepare_for_step :- turn_off_gc. %% before computing a step
-wrap_up_step :-                  %% after computing a step
-        turn_on_gc,
-        garbage_collect.
-
-%% -- abortStep
-%%    if doing_step is asserted, throw exog_action
-%% abortStep :- thread_signal(indigolog_thread, (doing_step -> throw(exog_action) ; true)).
-abortStep :- doing_step -> throw(exog_action); true.
-
-%% -- mayEvolve(E1,H1,E2,H2,S)
-%%    perform transition from (E1,H1) to (E2,H2) with result S
-%%    trans = (E1,H1) performs a step to (E2,H2)
-%%    final = (E1,H1) is a terminating configuration
-%%    exog  = an exogenous actions occurred
-%%    failed= (E1,H1) is a dead-end configuration
-
-mayEvolve(E1, H1, E2, H2, S) :-
-        catch( (
-                 %% 1. assert flag doing_step
-                 assert(doing_step),
-                 %% 2. check if exog happens
-                 (exists_pending_exog_event -> abortStep ; true),
-                 %% 3. evolve
-                 ( %% 3.1 first test if E1 H1 terminates
-                   final(E1, H1)         -> S = final ;
-                   %% 3.2 then test if E1 H1 has a good trans
-                   trans(E1, H1, E2, H2) -> S = trans;
-                   %% 3.3 report fail
-                                            S = failed ),
-                 %% 4. retract flag
-                 retractall(doing_step)
-               ),
-               %% catch exception
-               exog_action,
-               %% exception handling
-               (retractall(doing_step), S = exog)).
-
-
-indigolog(E) :- initialize, thread_create(indigo(E,[]), ID, [at_exit(plan_done(ID)), alias(indigolog_thread), detached(true)]). %,
+indigolog(E) :-
+        %% 1. clean up indigolog database
+        initialize,
+        %% 2. run indigo/2 in the indigolog_thread
+        thread_create(indigo(E,[]), ID, [at_exit(plan_done(ID)), alias(indigolog_thread), detached(true)]).
 %% indigolog(E) :- initialize, indigo(E, []).
 
 indigo(E, H) :-
@@ -187,23 +109,75 @@ indigo2(H, E, [A|H]) :-
         indixeq(A, H, H1), %% execute domain action
         indigo(E, H1).
 
+%% -- mayEvolve(E1,H1,E2,H2,S)
+%%    perform transition from (E1,H1) to (E2,H2) with result S
+%%    trans = (E1,H1) performs a step to (E2,H2)
+%%    final = (E1,H1) is a terminating configuration
+%%    exog  = an exogenous actions occurred
+%%    failed= (E1,H1) is a dead-end configuration
+mayEvolve(E1, H1, E2, H2, S) :-
+        catch( ( %% 1. assert flag doing_step
+                 assert(doing_step),
+                 %% 2. check if exog happens
+                 (exists_pending_exog_event -> abortStep ; true),
+                 %% 3. evolve
+                 ( %% 3.1 first test if E1 H1 terminates
+                   final(E1, H1)         -> S = final ;
+                   %% 3.2 then test if E1 H1 has a good trans
+                   trans(E1, H1, E2, H2) -> S = trans;
+                   %% 3.3 report fail
+                                            S = failed ),
+                 %% 4. retract flag
+                 retractall(doing_step) ),
+               %% catch exception
+               exog_action,
+               %% exception handling
+               (retractall(doing_step), S = exog)).
+
+plan_done(ID) :- write('Plan Done and '), write(ID), write(' exited!').
+
+%% -- abortStep
+%%    if doing_step is asserted, throw exog_action
+%% abortStep :- thread_signal(indigolog_thread, (doing_step -> throw(exog_action) ; true)).
+abortStep :- doing_step -> throw(exog_action); true.
+
+%% -- predicate to prepare everything for computing the next single step.
+%%    diable gc to speed up
+prepare_for_step :- turn_off_gc. %% before computing a step
+wrap_up_step :-                  %% after computing a step
+        turn_on_gc,
+        garbage_collect.
+
+initialize :-
+        retractall(currently(_, _)),
+        forall(initially(F, V), assert(currently(F, V))), 
+        clean_cache, %% clean has_valc/2
+        reset_indigolog_dbs,
+        refresh_counter.
+
+reset_indigolog_dbs :-
+        retractall(doing_step),
+        retractall(indi_exog(_)),
+        %% retractall(protectHistory(_)),
+        retractall(rollednow(_)),
+        retractall(now(_)),
+        update_now([]),
+        assert(rollednow([])).
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Exogenous events
-%% Exogenous actions are stored in the local predicate indi_exog(Act)
+%% Exogenous actions are stored in the local predicate indi_exog/1
 %% until they are ready to be incorporated into the history
-:- dynamic
-        indi_exog/1.
 
 %% check if exists any pending exogenous event
 exists_pending_exog_event :- indi_exog(_).
 
 %% -- exog_action_occurred(+L)
-%%    called to report the occurrence of a list L of 
-%%    exogenus actions (called from env. manager)
+%%    called to report the occurrence of a list L of
+%%    exogenus actions (called from Python executive)
 %%    First we add each exogenous event to the clause indi_exog/1 and
 %%    in the end, if we are performing an evolution step, we abort the step.
 exog_action_occurred([]) :- doing_step -> abortStep ; true.
-%% exog_action_occurred([]).
 exog_action_occurred([ExoAction|LExoAction]) :-
         assert(indi_exog(ExoAction)),   
         report_message(exogaction, ['Exog. Action *',ExoAction,'* occurred']),
@@ -234,18 +208,7 @@ doWaitForExog(H1,H2):-
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% History
-
-:- dynamic
-        now/1,
-        temp/2, %% Temporal predicate used for rolling forward
-        has_valc/3, %% store cached fluent (F, V, H)
-        rollednow/1,
-        currently/2.
-
-:- multifile
-        initially/2.
         
-
 %% -- before(?History1, ?History2)
 %%    success if History1 is a previous hsitory of History2
 before(H1, H2) :- append(_, H1, H2).
@@ -257,31 +220,33 @@ pasthist(H) :- now(H2), before(H, H2).
 %% -- update_now(+History)
 %%    updates the current History
 update_now(H) :-
-        retract(now(_)) -> assert(now(H));
-                           assert(now(H)). %% if now(_) is empty at the beginning
+        retractall(now(_)),
+        assert(now(H)).
 
 %% -- roll_parameters(L, M, N)
 %%    define parameters for roll/2
 %%    L: the history has to be longer than this, or dont bother
 %%    M: if the history is longer than this, forced roll (M >= L)
-%%    N: the length of the tail of the history to be dropped and saved in preserve, set N=0 to never roll forward
-%% roll_parameters(1,1,0).  %% Never roll forward
+%%    N: the length of the tail of the history to be dropped and saved in preserve/1, set N=0 to never roll forward
+
+%% roll_parameters(1,1,0).   %% Never roll forward
 %% roll_parameters(20,40,5). %% can roll after 20, must roll after 40, keep 5 actions
 
 must_roll(H) :- roll_parameters(_,M,N), length(H,L1), L1 > M, N>0.
-can_roll(H) :- roll_parameters(L,_,N), length(H,L1), L1 > L, N>0.
+can_roll(H)  :- roll_parameters(L,_,N), length(H,L1), L1 > L, N>0.
 
 clean_cache :- retractall(has_valc(_,_,_)).
 
-%% -- Update the cache information by stripping out the subhistory H
+%% -- update_cache(+Htail)
+%%    update the cache information by stripping out the subhistory Htail
 update_cache(Htail) :-
-	retract(has_valc(F, V, OldHis)), %% OldHis is the old longer history
-	append(Hhead, Htail, OldHis),           %% H1 is the new shorter history
+	retract(has_valc(F, V, OldHis)),
+	append(Hhead, Htail, OldHis),
 	assert(has_valc(F, V, Hhead)),  
 	fail.
 update_cache(_).
 
-% %% -- roll_action_fluent(+Action, +Fluent)
+% %% -- roll_action_fluent(+Action, ?Fluent)
 % %%    Fluent requires update wrt executed Action
 % %%    at this point Fluent may still contain free var
 % roll_action_fluent(A, F) :-
@@ -323,12 +288,6 @@ roll_action(_) :- %% handle all the temp/2
 	fail.
 roll_action(_).
 
-show_cache :-
-        has_valc(F, V, H),
-        report_message(system(6), ['Cached fluent', F, 'had value', V, 'at', H]),
-        fail.
-show_cache.
-
 %% -- preserve(H)
 %%    rolls forward the initial database currently/2 from [] to H
 preserve([]).
@@ -345,11 +304,6 @@ split(0,H,[],H) :- ! .
 split(N,[A|H],[A|H1],H2) :- N > 0, N1 is N-1, split(N1,H,H1,H2).
 %% ?- split(2, [a, b, c, d, e], [a, b], [c, d, e]).
 
-show_currently :-
-        currently(F, V),
-        report_message(system(6), ['Fluent', F, 'had value', V]),
-        fail.
-show_currently.
 
 %% -- roll_db(+History1,-History2)
 %%    roll from History1 to History2
@@ -388,6 +342,18 @@ handle_rolling(H1,H1).
 %%    optional rolling forward
 pause_or_roll(H1,H2) :- can_roll(H1), !, roll(H1, H2).
 pause_or_roll(H1,H1).
+
+show_currently :-
+        currently(F, V),
+        report_message(system(6), ['Fluent', F, 'had value', V]),
+        fail.
+show_currently.
+
+show_cache :-
+        has_valc(F, V, H),
+        report_message(system(6), ['Cached fluent', F, 'had value', V, 'at', H]),
+        fail.
+show_cache.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Projector
@@ -898,3 +864,21 @@ indixeq(Act, H, H2) :- %% execution of nonsensing actions
             wait_if_neccessary,
             H2 = [Act|H],
             update_now(H2)).
+
+%% Mapping
+:- dynamic
+        settles/5,
+        rejects/5.
+
+%%    causes_val like predicates, define effects of sensing actions
+%% -- rejects(+SensingAct, +SensedResult, +Fluent, +Value, +Condition)
+%%    If Condition holds and SensingAct gets SensedResult, then Fluent does not
+%%    get Value
+%%    reject(smell, 0, locWumpus, Y, adj(locRobot, Y)) means if smell gets 0 as result,
+%%    then ALL the adjcent location Y of locRobot can not be location of the Wumpus.
+%% -- settles(+SensingAct, +SensedResult, +Fluent, +Value, +Condition)
+%%    settles(senseGold, 1, isGold(L), true, L=locRobot).
+
+        
+read_action(Act) :-
+	thread_get_message(Act).

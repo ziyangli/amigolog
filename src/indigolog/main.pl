@@ -45,6 +45,9 @@ util_feedback(Result) :-
         executing_action(Act),
         thread_send_message(indigolog_thread, got_sensing(Act, Result)).
 
+util_exog(ExogAct) :-
+        exog_action_occurred([ExogAct]).
+
 
         
 % prim_fluent(robotDir).
