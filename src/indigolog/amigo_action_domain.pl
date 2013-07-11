@@ -1,5 +1,5 @@
 %% Interface to the outside world via read and write
-execute(A,Sr) :- ask_execute(A,Sr).
+%% execute(A,Sr) :- ask_execute(A,Sr).
 %% exog_occurs(A) :- ask_exog_occurs(A).
 % exog_occurs(_) :- fail.
 

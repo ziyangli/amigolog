@@ -9,12 +9,8 @@ if __name__ == "__main__":
 
     W = client.SimWorld()
 
-    # table_x = 2.683
-    # table_y = -1.637
-
-    # table = W.add_object("table-1", "table", table_x, table_y, 0)
     W.add_object("seven_up-1",  "seven_up",  2,-1, 0.88)
-    W.add_object("coke-1",  "coke",  1,2,0.88)
-    #W.add_object("person-1", "person", 6.309, -1.0, 0)
+    W.add_object("coke-1",  "coke",  0.806845715361795,2.1867359796956563,0.5493168002464702)
+    W.add_object("coke-2",  "coke",  1.5, -1, 0.9)
     W.add_object("person-1", "person", 8.309, -3.0, 0)
 

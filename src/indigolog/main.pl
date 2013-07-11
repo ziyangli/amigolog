@@ -19,7 +19,7 @@
 %% Consult application
 %% :- consult(demo_waiter).
 :- consult(amigo_action_domain).
-
+:- consult(demo_elevator).
 %% :- use_module("~/ros/workspace/git/thea/owl2_io.pl").
 %% :- use_module("~/ros/workspace/git/thea/owl2_model.pl").
 
@@ -102,14 +102,16 @@ trace_setting :-
 %       spy(final), 
         trace(mayEvolve),
         trace(indigo2), 
-        trace(holds), 
-         trace(trans),
-         trace(final),
-         trace(has_val/3, -all),
-         trace(initially/2, -all).
+        trace(holds, -all), 
+        trace(trans),
+        trace(final),
+        trace(has_val/3, -all),
+        trace(initially/2, -all).
 %% :- trace_setting.
 
-kuku(papa).
-prim_action(del_count).
+
+prim_action(del_count(X)) :- member(X, [1, 2, 3]).
 poss(del_count, false).
 proc(ndet_test, ndet([add_count, del_count], [add_count, add_count])).
+proc(rpi_test, rpi(X, [1, 2, 3], star(add_count(X), 1))).
+proc(star_test, star(add_count, 1)).

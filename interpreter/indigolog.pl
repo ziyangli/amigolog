@@ -90,8 +90,102 @@ finalize.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 :- ensure_loaded(data_util).
-:- ensure_loaded(sysexog). %% load the system exog events
+%% :- ensure_loaded(sysexog). %% load the system exog events
 :- ensure_loaded(sys_util).
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% TOP LEVEL MAIN CYCLE
+%% -- indigolog(E)
+%%    E is a high-level program
+%%    The history H is a list of actions (prim or exog), initially [] (empty)
+%%    Sensing reports are inserted as actions of the form e(fluent,value)
+
+:- dynamic
+        doing_step/0. %% flag to show a step is being calculated
+
+%% -- predicate to prepare everything for computing the next single step.
+%%    diable gc to speed up
+prepare_for_step :- turn_off_gc. %% before computing a step
+wrap_up_step :-                  %% after computing a step
+        turn_on_gc,
+        garbage_collect.
+
+%% -- abortStep
+%%    if doing_step is asserted, throw exog_action
+%% abortStep :- thread_signal(indigolog_thread, (doing_step -> throw(exog_action) ; true)).
+abortStep :- doing_step -> throw(exog_action); true.
+
+%% -- mayEvolve(E1,H1,E2,H2,S)
+%%    perform transition from (E1,H1) to (E2,H2) with result S
+%%    trans = (E1,H1) performs a step to (E2,H2)
+%%    final = (E1,H1) is a terminating configuration
+%%    exog  = an exogenous actions occurred
+%%    failed= (E1,H1) is a dead-end configuration
+
+mayEvolve(E1, H1, E2, H2, S) :-
+        catch( (
+                 %% 1. assert flag doing_step
+                 assert(doing_step),
+                 %% 2. check if exog happens
+                 (exists_pending_exog_event -> abortStep ; true),
+                 %% 3. evolve
+                 ( %% 3.1 first test if E1 H1 terminates
+                   final(E1, H1)         -> S = final ;
+                   %% 3.2 then test if E1 H1 has a good trans
+                   trans(E1, H1, E2, H2) -> S = trans;
+                   %% 3.3 report fail
+                                            S = failed ),
+                 %% 4. retract flag
+                 retractall(doing_step)
+               ),
+               %% catch exception
+               exog_action,
+               %% exception handling
+               (retractall(doing_step), S = exog)).
+
+
+indigolog(E) :- initialize, thread_create(indigo(E,[]), ID, [at_exit(plan_done(ID)), alias(indigolog_thread), detached(true)]). %,
+%% indigolog(E) :- initialize, indigo(E, []).
+
+indigo(E, H) :-
+        %% 1. first get rid of the tail of H when necessary and update currently
+        %%    H2 is the header part of H
+        handle_rolling(H, H2), !,
+        %% 2. handle pending exog. events
+        %%    exog events are added to the front of H2
+        handle_exog(H2, H3), !,
+        prepare_for_step,               %% turn off gc
+        %% 3. compute next configuration E4, H4, S
+        mayEvolve(E, H3, E4, H4, S), !, 
+        wrap_up_step,                   %% turn on gc again
+        (
+          %% 4.1 clean up the history or execute the action
+          S=trans  -> indigo2(H3, E4, H4);
+          %% 4.2 program ends
+          S=final  -> report_message(program, 'Success.');
+          %% 4.3 exog event happens during trans, harly true
+          %%     exog event is included in H3
+          S=exog   -> (report_message(program, 'Restarting step.'), indigo(E, H3)); 
+          S=failed -> report_message(program, 'Program fails.')
+        ).
+
+%% -- indigo2(+H1, +E, +H2)
+%%    called from indigo/2 only after a successful TRANS
+%%    H1 is the history BEFORE the transition
+%%    E is the program that remains to execute
+%%    H2 is the history AFTER the transition
+indigo2(H, E, H) :- indigo(E, H). %% The case of TRANS for tests ?(P)
+indigo2(H, E, [wait|H]) :-
+        !,
+        pause_or_roll(H, H1),
+        doWaitForExog(H1, H2),
+        indigo(E, H2).
+indigo2(H,E,[stop_interrupts|H]) :- !, 
+	indigo(E,[stop_interrupts|H]).
+indigo2(H, E, [A|H]) :-
+        indixeq(A, H, H1), %% execute domain action
+        indigo(E, H1).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Exogenous events
@@ -100,34 +194,16 @@ finalize.
 :- dynamic
         indi_exog/1.
 
-%% -- exog_occurs(Act) :- ask_exog_occurs(Act).
-%% -- ask_exog_occurs(Act) :- writeln('Waiting for Exogenous input:'), nl, read_action(Act).
-%% -- exog_occurs(LA)
-%%    return a list LA of exog. actions that have occurred SYNCHRONOUS
-
-%% in vanilla, exog_occurs(Act) will ask user to give exog events
-%% but exog should happen async, so in swi, exog_occurs is set to be empty
-%% Exogenous actions are handled async., so there is no need to handle
-%% sync. exogenous actions. It is always empty.
-exog_occurs([]).
-
-%% collect on-demand exogenous actions reported by exog_occurs/1 
-save_exog :- exog_occurs(L) -> store_exog(L) ; true.
-
 %% check if exists any pending exogenous event
 exists_pending_exog_event :- indi_exog(_).
-
-%% store exog events in indi_exog/1
-store_exog([]).  
-store_exog([A|L]) :- assertz(indi_exog(A)), store_exog(L).
 
 %% -- exog_action_occurred(+L)
 %%    called to report the occurrence of a list L of 
 %%    exogenus actions (called from env. manager)
 %%    First we add each exogenous event to the clause indi_exog/1 and
 %%    in the end, if we are performing an evolution step, we abort the step.
-%%    TODO: What does this mean????!!!! Can stop during execution?????? by zy.
 exog_action_occurred([]) :- doing_step -> abortStep ; true.
+%% exog_action_occurred([]).
 exog_action_occurred([ExoAction|LExoAction]) :-
         assert(indi_exog(ExoAction)),   
         report_message(exogaction, ['Exog. Action *',ExoAction,'* occurred']),
@@ -136,19 +212,17 @@ exog_action_occurred([ExoAction|LExoAction]) :-
 %% -- handle_exog(+History, -History2)
 %%    History2 is History1 with all pending exog actions placed at the front
 handle_exog(H1, H2) :- 
-	save_exog, %% Collect on-demand exogenous actions
-	exists_pending_exog_event, %% Any indi_exog/1 in the database?
         %% 1 - Collect SYSTEM exogenous actions (e.g., debug)
 	findall(A, (indi_exog(A), type_action(A, system)), LSysExog),
-        %% 2 - Collect NON-SYSTEM exogenous actions (e.g., domain actions)  
-	findall(A, (indi_exog(A), \+ type_action(A, system)), LNormal),	
+        %% 2 - Collect NON-SYSTEM exogenous actions (e.g., domain actions)
+        findall(A, (indi_exog(A), \+ type_action(A, system)), LNormal),	
         %% 3 - Append the lists to the current hitory (system list on front)
 	append(LSysExog, LNormal, LTotal),
-	append(LTotal, H1, H2), 
+        append(LTotal, H1, H2), 
 	update_now(H2),
 	%% 4 - Remove all indi_exog/1 clauses
 	retractall(indi_exog(_)).
-handle_exog(H1, H1). 	% No exogenous actions, keep same history
+handle_exog(H1, H1). %% No exogenous actions, keep same history
 
 %% -- doWaitForExog(+History1, -History2)
 %%    wait continously until an exogenous action occurrs
@@ -328,6 +402,11 @@ rdomain(V, D) :-
             bagof(P,apply(D,[P]),L)),
         shuffle(L,L2), !, member(V, L2).
 
+
+%% SPECIAL PROJECTOR CASES FOR SYSTEM-WIDE FLUENTS
+holds(neg(interrupts_running),H)  :- !, \+ holds(interrupts_running,H).
+holds(interrupts_running,H)       :- !, \+ (H=[stop_interrupts|_]).
+
 %% -- holds(+Condition,+H)
 %%    Condition holds in H (i.e., Condition is possibly true at H)
 
@@ -445,30 +524,6 @@ subfl([T1|L1],[T2|L2],H) :- subf(T1,T2,H), subfl(L1,L2,H).
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Calculation/Transition/Trans-Final
 
-%% INTERRUPTS
-
-%        /* (d) -  INTERRUPTS */
-% prim_action(start_interrupts).
-% prim_action(stop_interrupts).
-% prim_fluent(interrupts).
-% causes_val(start_interrupts, interrupts, running, true).
-% causes_val(stop_interrupts, interrupts, stopped, true).
-% poss(start_interrupts, true).
-% poss(stop_interrupts,  true).
-
-% proc(interrupt(V,Trigger,Body),            /* version with variable */
-%     while(interrupts=running, pi(V,if(Trigger,Body,?(neg(true)))))).
-% proc(interrupt(Trigger,Body),              /* version without variable */
-%     while(interrupts=running, if(Trigger,Body,?(neg(true))))).
-% proc(prioritized_interrupts(L),[start_interrupts,E]) :- expand_interrupts(L,E).
-% expand_interrupts([],stop_interrupts).
-% expand_interrupts([X|L],pconc(X,E)) :- expand_interrupts(L,E).
-
-final(interrupt(Trigger,Body),H) :-
-    final(while(interrupts_running,if(Trigger,Body,?(neg(true)))), H).
-final(interrupt(V,Trigger,Body),H) :- 
-    final(while(interrupts_running, pi(V,if(Trigger,Body,?(neg(true))))),H).
-
 trans(interrupt(Trigger,Body),H,E1,H1) :-
     trans(while(interrupts_running,if(Trigger,Body,?(neg(true)))),H,E1,H1).
 
@@ -476,26 +531,27 @@ trans(interrupt(V,Trigger,Body),H,E1,H1) :-
     trans(while(interrupts_running, 
     		pi(V,if(Trigger,Body,?(neg(true))))),H,E1,H1).  
 
-%% Note these fluents (e.g., halt) and special actions (e.g., halt_exec) need to be defined already.
+final(interrupt(Trigger,Body),H) :-
+    final(while(interrupts_running,if(Trigger,Body,?(neg(true)))), H).
 
-expand_interrupts([X|L],pconc(X,E)) :- expand_interrupts(L,E).
-expand_interrupts([],stop_interrupts).
+final(interrupt(V,Trigger,Body),H) :- 
+    final(while(interrupts_running, pi(V,if(Trigger,Body,?(neg(true))))),H).
 
+% Note these fluents (e.g., halt) and special actions (e.g., halt_exec) need to be defined already.
 trans(prioritized_interrupts(L),H,E1,H1) :- 
-        expand_interrupts([interrupt(haveExecuted(halt),  halt_exec),
-                           interrupt(haveExecuted(abort), abort_exec),
-                           interrupt(haveExecuted(pause), break_exec),
-                           interrupt(haveExecuted(reset), reset_exec),
-                           interrupt(haveExecuted(debug), debug_exec)|L],E), !,
+    expand_interrupts(L,E), !,
     trans(E,H,E1,H1).
 
 trans(prioritized_interrupts_simple(L),H,E1,H1) :- 
         expand_interrupts(L,E), !,
         trans(E,H,E1,H1).
 
-%% trans and final for system actions (e.g., show_debug, halt_exec, etc.)    
-final(stop_interrupts,_) :- fail, !.
+expand_interrupts([],stop_interrupts).
 
+expand_interrupts([X|L],pconc(X,E)) :-
+    expand_interrupts(L,E).
+
+final(stop_interrupts,_) :- fail, !.
 trans(stop_interrupts,H,[],[stop_interrupts|H]).
 
 %% TRADITIONAL SEARCH (From [De Giacomo & Levesque 99])
@@ -506,27 +562,25 @@ final(search(E,_),H) :- final(search(E),H).
 trans(search(E,M),H,E1,H1):- 
         report_message(program, ['Thinking linear plan on:      ', M]),
         (trans(search(E),H,E1,H1) ->
-             report_message(program, 'Finished thinking: Plan found!') 
+            report_message(program, 'Finished thinking: Plan found!') 
         ;
-             report_message(program, 'Finished thinking: No plan found!'), 
-              fail
-        ).
+            report_message(program, 'Finished thinking: No plan found!'), 
+            fail).
 
 %% Basic search/1
-%% search on E, using caching and replanning only when situation is not the expected one
-% if findpath/3 wants to abort everything it has to throw exception search
-% you can obtain the vanilla search version by having Prolog code to
-% ignore both catch/3 and throw/1.
+%% search on E, using caching and replanning only when situation
+%% is not the expected one
+%% if findpath/3 wants to abort everything it has to throw exception search
 final(search(E),H) :- final(E,H).
 
 trans(search(E),H,followpath(E1,L),H1) :- 
-        catch( (trans(E,H,E1,H1), findpath(E1, H1, L)) , search, fail).
+        catch((trans(E,H,E1,H1), findpath(E1,H1,L)), search, fail).
 
-% findpath(E,H,L): find a solution L for E at H; 
-%		   L is the list [E1,H1,E2,H2,...,EN,HN] encoding
-%		   each step evolution (Ei,Hi) where final(EN,HN)
-%
-% If last action was commit, then commit to the sub-plan found.
+%% -- findpath(+E,+H,-L)
+%%    find a solution L for E at H; 
+%%    L is the list [E1,H1,E2,H2,...,EN,HN] encoding
+%%    each step evolution (Ei,Hi) where final(EN,HN)
+%%    If last action was commit, then commit to the sub-plan found.
 findpath(E,[commit|H],L) :- !, 
 	(findpath(E,H,L) -> true ; throw(search)).
 findpath(E,H,[E,H]) :- final(E,H).
@@ -534,57 +588,16 @@ findpath(E,H,[E,H|L]) :-
 	trans(E,H,E1,H1), 
 	findpath(E1,H1,L).
 
-% followpath(E,L): execute program E wrt expected sequence of
-%		   configurations L=[E,HEx,E1,H1,...]
-%	if the current history does not match the next expected one
-% 	in L (i.e., H\=HEx), then redo the search for E from H
+%% -- followpath(E,L)
+%%    execute program E wrt expected sequence of
+%%    configurations L=[E,HEx,E1,H1,...]
+%%    if the current history does not match the next expected one
+%%    in L (i.e., H\=HEx), then redo the search for E from H
 final(followpath(E,[E,H]),H) :- !.
-final(followpath(E,_),H) :- final(E,H).  /* off path; check again */
+final(followpath(E,_),H) :- final(E,H).  %% off path; check again????
 
 trans(followpath(E,[E,H,E1,H1|L]),H,followpath(E1,[E1,H1|L]),H1) :- !.
-trans(followpath(E,_),H,E1,H1) :- trans(search(E),H,E1,H1). /* redo search */
-
-
-%% -- rconc(E1,E2)
-%%    real concurrency on 2 programs
-%%    simulate random choice in a concurrent execution of E1 and E2
-final(rconc(E1,E2),H) :- final(conc(E1,E2),H).
-trans(rconc(E1,E2),H,rconc(E11,E22),H1) :- 
-        ( random(1, 3, 1) -> 	% flip a coin!
-            ((trans(E1,H,E11,H1), E22=E2); (trans(E2,H,E22,H1), E11=E1));
-            ((trans(E2,H,E22,H1), E11=E1); (trans(E1,H,E11,H1), E22=E2)) ).
-
-%% -- rconc(L)
-%%    real concurrency on a list of programs L
-final(rconc([]),_).
-final(rconc([E|L]),H) :- final(E,H), final(rconc(L),H).
-
-trans(rconc(L),H,rconc([E1|LRest]),H1) :-
-	length(L,LL),
-	random(0,LL, R),
-	nth0(R,L,E),
-	trans(E,H,E1,H1),
-	select(E,L,LRest).	 
-
-%% Perform program P(V) with all elements in domain D: P(e1);P(e2);...;P(en)
-%% Domain D can either be a list of elements or a domain identifier from 
-%% where we get its domain list with getdomain/2
-
-final(for(V,D,P),H)     :-
-        D\=[], atom(D), !, domain(D,L), 
-        final(for(V,L,P),H).
-final(for(_,[],_),_).
-final(for(V,[F|L],P),H) :- subv(V,F,P,P1), final(P1,H), final(for(V,L,P),H).
-
-trans(for(V,D,P),H,E1,H1) :- D\=[], atom(D), !, domain(D,L), 
-                             trans(for(V,L,P),H,E1,H1).
-trans(for(V,[F|L],P),H,[E1,for(V,L,P)],H1) :- 
-	subv(V,F,P,P1), trans(P1,H,E1,H1).
-
-%% -- ??(P)
-%%    a test action like ?(P) but it leaves a test(P) mark in H
-trans(??(P),H,[],[test(P)|H]):- holds(P,H). 
-
+trans(followpath(E,_),H,E1,H1) :- trans(search(E),H,E1,H1). %% redo search
 
 %% -- query(+P, -S)
 %%    call P and return true or false
@@ -599,44 +612,12 @@ trans(wait,H,[],[wait|H])    :- !. %% wait is a no-op but encourages rolling db
 trans(commit,S,[],[commit|S]).	   %% commit to the plan found so far! 
 trans(abort,S,[],[abort|S]).	   %% completely abort execution
 
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% CONGOLOG CONSTRUCTS
-final(iconc(_),_).
-final(conc(E1,E2),H)  :- final(E1,H), final(E2,H).
-final(pconc(E1,E2),H) :- final(E1,H), final(E2,H).
+%% MAIN CONSTRUCT
 
-%% -- iconc(E)
-%%    iterative concurrent execution of E
-%% -- conc(E1,E2)
-%%    concurrent (interleaved) execution of E1 and E2
-%% -- pconc(E1,E2)
-%%    prioritized conc. execution of E1 and E2 (E1>E2)
-trans(iconc(E),H,conc(E1,iconc(E)),H1) :- trans(E,H,E1,H1).
-trans(conc(E1,E2),H,conc(E,E2),H1) :- trans(E1,H,E,H1).
-trans(conc(E1,E2),H,conc(E1,E),H1) :- trans(E2,H,E,H1).
-trans(pconc(E1,E2),H,E,H1) :-    % bpconc(E1,E2,H) is for when E1 blocked at H
-    trans(E1,H,E3,H1) -> E=pconc(E3,E2) ; trans(bpconc(E1,E2,H),H,E,H1).
-
-%% -- bpconc(E1,E2,H)
-%%    used to improve the performance of pconc(_,_)
-%%    does not reconsider process E1 as long as the history
-%%     remains being H (at H, E1 is already known to be blocked)
-trans(bpconc(E1,E2,H),H,E,H1) :- !,
-    trans(E2,H,E3,H1),  % blocked history H
-    (H1=H -> E=bpconc(E1,E3,H) ; E=pconc(E1,E3)).
-trans(bpconc(E1,E2,_),H,E,H1) :- trans(pconc(E1,E2),H,E,H1).
-
-
-final(star(_),_).
-final(star(_,_),_).
-
-%% last FINAL
-final(E,H)           :- proc(E,E2), !, final(E2,H).
-final([E|L],H)       :- final(E,H), final(L,H).
-final([],_).
-
-
+%% -- ??(P)
+%%    a test action like ?(P) but it leaves a test(P) mark in H
+trans(??(P),H,[],[test(P)|H]) :- holds(P,H). 
 trans(?(P),H,[],H)            :- holds(P,H).
 
 %% -- wndet(E1,E2)
@@ -656,6 +637,55 @@ trans(ndet(E1,E2),H,E,H1)     :-
             (trans(E1,H,E,H1); trans(E2,H,E,H1));
             (trans(E2,H,E,H1); trans(E1,H,E,H1))).
 
+%% -- rconc(E1,E2)
+%%    random concurrency on 2 programs
+final(rconc(E1,E2),H) :- final(E1,H), final(E2,H).
+trans(rconc(E1,E2),H,rconc(E11,E22),H1) :- 
+        ( random(1, 3, 1) -> 	% flip a coin!
+            ((trans(E1,H,E11,H1), E22=E2); (trans(E2,H,E22,H1), E11=E1));
+            ((trans(E2,H,E22,H1), E11=E1); (trans(E1,H,E11,H1), E22=E2)) ).
+
+%% -- rconc(L)
+%%    random concurrency on a list of programs L
+final(rconc([]),_).
+final(rconc([E|L]),H) :- final(E,H), final(rconc(L),H).
+
+trans(rconc(L),H,rconc([E1|LRest]),H1) :-
+	length(L,LL),
+	random(0,LL, R),
+	nth0(R,L,E),
+	trans(E,H,E1,H1),
+	select(E,L,LRest).	 
+
+%% -- iconc(E)
+%%    iterative concurrent execution of E, star + conc
+final(iconc(_),_).
+trans(iconc(E),H,conc(E1,iconc(E)),H1) :- trans(E,H,E1,H1).
+
+%% -- conc(E1,E2)
+%%    concurrent (interleaved) execution of E1 and E2
+final(conc(E1,E2),H)               :- final(E1,H), final(E2,H).
+trans(conc(E1,E2),H,conc(E,E2),H1) :- trans(E1,H,E,H1).
+trans(conc(E1,E2),H,conc(E1,E),H1) :- trans(E2,H,E,H1).
+
+%% -- pconc(E1,E2)
+%%    prioritized conc. execution of E1 and E2 (E1>E2)
+final(pconc(E1,E2),H)                :- final(E1,H), final(E2,H).
+trans(pconc(E1,E2),H,pconc(E,E2),H1) :- trans(E1,H,E,H1). %% 
+trans(pconc(E1,E2),H,E,H1) :- trans(bpconc(E1,E2,H),H,E,H1).
+
+%% -- bpconc(E1,E2,H)
+%%    used to improve the performance of pconc(_,_)
+%%    does not reconsider process E1 as long as the history
+%%    remains being H (at H, E1 is already known to be blocked)
+trans(bpconc(E1,E2,H),H,E,H1) :-
+        !, %% blocked history H
+        trans(E2,H,E3,H1), 
+        (H1=H -> E=bpconc(E1,E3,H) ; E=pconc(E1,E3)).
+trans(bpconc(E1,E2,_),H,E,H1) :-
+        %% for the other H
+        trans(pconc(E1,E2),H,E,H1).
+
 %% -- if(P,E1,E2)
 %%    if control constuct
 %%    Note: P can be an unground rule to bind some params
@@ -673,33 +703,60 @@ trans(if(P,E1,E2),H,E,H1)     :-
 final(while(P,E),H)                    :- holds(neg(P),H) ; final(E,H).
 trans(while(P,E),H,[E1,while(P,E)],H1) :- holds(P,H), trans(E,H,E1,H1).
 
-%% -- rpi(X,D)
-%%    real nondeterministic choice of argument from D
-final(rpi((V,D),E),H) :- !, final(rpi(V,D,E),H).
-final(rpi(V,D,E),H)   :- rdomain(W,D), subv(V,W,E,E2), !, final(E2,H).
-trans(rpi((V,D),E),H,E1,H1):- !, trans(rpi(V,D,E),H,E1,H1).
-trans(rpi(V,D,E),H,E1,H1)  :- rdomain(W,D), subv(V,W,E,E2), trans(E2,H,E1,H1).
+%% -- for(V, +Domain, +P)
+%%   perform program P(V) with all elements in Domain
+final(for(V,D,P),H)     :-
+        D\=[], atom(D), !,
+        bagof(X, domain(X,D), L), 
+        final(for(V,L,P),H).
+final(for(V,[F|L],P),H) :-
+        subv(V,F,P,P1), final(P1,H),
+        final(for(V,L,P),H).
+final(for(_,[],_),_).
 
-%% -- pi
+trans(for(V,D,P),H,E1,H1)                  :-
+        D\=[], atom(D), !, %% D is not a list
+        bagof(X, domain(X,D), L), 
+        trans(for(V,L,P),H,E1,H1).
+trans(for(V,[F|L],P),H,[E1,for(V,L,P)],H1) :- 
+	subv(V,F,P,P1), trans(P1,H,E1,H1).
+trans(for(_,[],_),H,[],H). %% TODO: is this necessary?
+
+%% -- rpi(-V,+Domain,+E)
+%%    real nondeterministic choice of argument from Domain
+final(rpi((V,D),E),H)       :- !, final(rpi(V,D,E),H).
+final(rpi(V,D,E),H)         :- rdomain(W,D), subv(V,W,E,E2), !, final(E2,H).
+trans(rpi((V,D),E),H,E1,H1) :- !, trans(rpi(V,D,E),H,E1,H1).
+trans(rpi(V,D,E),H,E1,H1)   :- rdomain(W,D), subv(V,W,E,E2), trans(E2,H,E1,H1).
+
+%% -- pi(-V,+Domain,+E)
 %%    Note: trans will not check if the binding leads to final success
 %%          only make sure the binding leads to one successful trans
-final(pi([],E),H)    :- !, final(E,H).
 final(pi([V|L],E),H) :- !, final(pi(L,pi(V,E)),H).
 final(pi(V,E),H)     :- !, subv(V,_,E,E2), !, final(E2,H).
+final(pi([],E),H)    :- !, final(E,H).
 final(pi((V,D),E),H) :- !, final(pi(V,D,E),H).
 final(pi(V,D,E),H)   :- domain(W,D), subv(V,W,E,E2), !, final(E2,H).
 
-trans(pi([],E),H,E1,H1)    :- !, trans(E,H,E1,H1).
 trans(pi([V|L],E),H,E1,H1) :- !, trans(pi(L,pi(V,E)),H,E1,H1).
-
+trans(pi(V,E),H,E1,H1)     :- subv(V,_,E,E2), !, trans(E2,H,E1,H1).
+trans(pi([],E),H,E1,H1)    :- !, trans(E,H,E1,H1).
 trans(pi((V,D),E),H,E1,H1) :- !, trans(pi(V,D,E),H,E1,H1).
 trans(pi(V,D,E),H,E1,H1)   :- !, domain(W,D), subv(V,W,E,E2), trans(E2,H,E1,H1).
-trans(pi(V,E),H,E1,H1)     :- subv(V,_,E,E2), !, trans(E2,H,E1,H1).
 
+%% -- star(E)/star(E,N)
+%%    run program E 0 - inf/N times
+final(star(_),_).
+final(star(_, _), _).
 trans(star(E,1),H,E1,H1)               :- !, trans(E,H,E1,H1).
 trans(star(E,N),H,[E1,star(E,M)],H1)   :- N>1, trans(E,H,E1,H1), M is N-1.
-trans(star(E),H,E1,H1)                 :- trans(E,H,E1,H1).
 trans(star(E),H,[E1,star(E)],H1)       :- trans(E,H,E1,H1).
+
+
+%% LAST FINAL
+final([E|L],H)       :- final(E,H), final(L,H).
+final(E,H)           :- proc(E,E2), !, final(E2,H).
+final([],_).
 
 trans([E|L],H,[E1|L],H2)  :- trans(E,H,E1,H2).
 trans([E|L],H,E1,H2)      :- \+ L=[], final(E,H), trans(L,H,E1,H2).
@@ -732,31 +789,6 @@ trans(E,H,[],[E1|H]) :-
 	poss(E1,P), 
 	holds(P,H).
 
-
-
-
-%% if doing_step is asserted, throw exog_action
-%% abortStep :- thread_signal(indigolog_thread, (doing_step -> throw(exog_action) ; true)).
-abortStep :- doing_step -> throw(exog_action); true.
-
-%% -- mayEvolve(E1,H1,E2,H2,S)
-%%    perform transition from (E1,H1) to (E2,H2) with result S:
-%%    trans = (E1,H1) performs a step to (E2,H2)
-%%    final = (E1,H1) is a terminating configuration
-%%    exog  = an exogenous actions occurred
-%%    failed= (E1,H1) is a dead-end configuration
-%%    system= system action transition
-mayEvolve(E1, H1, E2, H2, S) :-
-        catch( (
-                 assert(doing_step), % assert flag doing_step
-                 (exists_pending_exog_event -> abortStep ; true), %% TODO: do we have E2, H2 if abortStep? will this happened? because already handle exog events.
-                 (final(E1, H1) -> S = final ; %% first test if configuration E1 H1 terminates the program!!
-                     trans(E1, H1, E2, H2) -> S = trans;
-                     S = failed),
-                 retract(doing_step) %% retract flag
-               ), 
-               exog_action,
-               (retractall(doing_step), S = exog)).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Execution
@@ -866,63 +898,3 @@ indixeq(Act, H, H2) :- %% execution of nonsensing actions
             wait_if_neccessary,
             H2 = [Act|H],
             update_now(H2)).
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% TOP LEVEL MAIN CYCLE
-%% indigolog(E): E is a high-level program
-%%  	The history H is a list of actions (prim or exog), initially [] (empty)
-%% 	Sensing reports are inserted as actions of  the form e(fluent,value)
-
-:- dynamic
-        doing_step/0. %% flag to show a step is being calculated
-
-%% -- predicate to prepare everything for computing the next single step.
-%%    diable gc to speed up
-prepare_for_step :- turn_off_gc. %% before computing a step
-wrap_up_step :-                  %% after computing a step
-        retractall(doing_step),
-        turn_on_gc,
-        garbage_collect.
-
-indigolog(E) :- initialize, thread_create(indigo(E,[]), ID, [at_exit(plan_done(ID)), alias(indigolog_thread), detached(true)]). %,
-%% indigolog(E) :- initialize, indigo(E, []).
-
-%% % (1)- In each single step ask for an exogenous action, check it and
-%% %	continue execution inserting that exogenous action
-%% indigo(E,H) :- exog_occurs(Act), exog_action(Act), !, indigo(E,[Act|H]).
-
-%% % (2) - Find a signle step (trans), execute it, commit and continue
-%% indigo(E,H) :- trans(E,H,E1,H1), indixeq(H,H1,H2), !, assertz_plan(H2), refresh_fluent(H2), indigo(E1,H2).
-
-%% % (3) - If E is final write the length of history H
-%% % original one
-%% % indigo(E,H) :- final(E,H), nl, length(H,N), write(N), write(' actions.'), nl.
-
-%% % added by ziyang
-%% indigo(E,H) :- final(E,H), assertz_plan(H), refresh_fluent(H). 
-
-indigo(E, H) :-
-        handle_rolling(H, H2), !, %% get rid of tail of History if necessary and update currently, so H2 is the header part of H
-        handle_exog(H2, H3),   !, %% handle pending exog. events, exog events are added to the front of H2, so H3 is longer
-        prepare_for_step,
-        mayEvolve(E, H3, E4, H4, S), !, %% compute next configuration E4, H4
-        wrap_up_step,
-        (S=trans -> indigo2(H3, E4, H4);
-            S=final -> report_message(program, 'Success.');
-            S=exog -> (report_message(program, 'Restarting step.'), indigo(E, H3)); %% exog is included in H3
-            S=failed -> report_message(program, 'Program fails.')).
-
-%% -- indigo2(+H1, +E, +H2)
-%%    called from indigo/2 only after a successful TRANS
-%%    H1 is the history BEFORE the transition
-%%    E is the program that remains to execute
-%%    H2 is the history AFTER the transition
-indigo2(H, E, H) :- indigo(E, H). %% The case of TRANS for tests ?(P)
-indigo2(H, E, [wait|H]) :-
-        !,
-        pause_or_roll(H, H1),
-        doWaitForExog(H1, H2),
-        indigo(E, H2).
-indigo2(H, E, [A|H]) :-
-        indixeq(A, H, H1), %% execute domain action
-        indigo(E, H1).

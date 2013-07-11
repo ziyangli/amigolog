@@ -1,6 +1,5 @@
 #!/usr/bin/python
-import roslib; roslib.load_manifest('atomic_grounding_executioner') ## ?? This should be changed, right? Ziyang
-
+import roslib; roslib.load_manifest('atomic_grounding_executioner')
 import rospy
 import robot_skills
 import robot_skills.amigo
@@ -11,14 +10,16 @@ import smach
 import smach_ros
 import geometry_msgs
 
-def startup():
-	amigo = robot_skills.amigo.Amigo(wait_services=True)
-	return amigo
+import threading
+
+def startup(): 
+    amigo = robot_skills.amigo.Amigo(wait_services=True)
+    return amigo
 
 def initialize(self):
     self.lights.set_color(0,0,1)  #be sure lights are blue
-
-    ## self.head.reset_position()
+        
+    self.head.reset_position()
     self.leftArm.reset_arm()
     self.leftArm.send_gripper_goal_close()
     self.rightArm.reset_arm()
@@ -32,20 +33,18 @@ def initialize(self):
 
 def init_retract_facts(self):
 
-	##retract old facts
-    ## commented because the interpreter will do this everytime you query a new plan
-    # robot.reasoner.query(Compound("retractall", Compound("indigolog_plan", "X")))
-    # robot.reasoner.query(Compound("retractall", Compound("action", "X")))
-
+    ##retract old facts
+    robot.reasoner.query(Compound("retractall", Compound("indigolog_plan", "X")))    
+    robot.reasoner.query(Compound("retractall", Compound("action", "X")))    
+    robot.reasoner.query(Compound("retractall", Compound("thread_ready_for_execution", "X")))    
+    robot.reasoner.query(Compound("retractall", Compound("thread_running", "X")))    
+    
     ##Load database
     rospy.loginfo("[AG] UNCOMMENT LOADING DATABASE OF INDIGOLOG IF INDIGOLOG IS USED")
+    #self.reasoner.query(Compound("load_database","ZIYANG_package name",'main.pl'))
 
-    self.reasoner.query(Compound("load_database","tue_owls_indigolog_exec",'knowledge/kb_ag.pl'))
-    self.reasoner.query(Compound("load_database", "tue_owls_indigolog_exec", 'knowledge/locations_ag.pl'))
+    self.reasoner.query(Compound("load_database","atomic_grounding_executioner",'knowledge/kb_ag_v3.pl'))
     rospy.loginfo("[AG] Database loaded")
-
-    self.reasoner.query(Compound("load_database","tue_owls_indigolog_exec",'src/indigolog/main.pl'))
-    rospy.loginfo("[AG] Indigolog loaded.")
 
 def execute_smach_statemachine(self, machine):
 
@@ -69,7 +68,7 @@ def execute_smach_state(self, state, transitions):
             with self:
 
                 smach.StateMachine.add('EXECUTE_STATE', state)
-
+    
     machine = Generated_StateMachine(state, transitions)
 
     introserver = smach_ros.IntrospectionServer('server_name', machine, '/SM_ROOT_PRIMARY')
@@ -83,6 +82,7 @@ def execute_smach_state(self, state, transitions):
 
     return result
 
+
 def execute(self, action, action_input=None):
 
     ### HUMAN INTERACTION ###
@@ -94,7 +94,7 @@ def execute(self, action, action_input=None):
     ### ARMS ###
 
     elif action == "arm":
-        arm_action = str(action_input[0])
+        arm_action = str(action_input[0]) 
         side = str(action_input[1])
         if side == "left":
             robotArm = robot.leftArm
@@ -102,7 +102,7 @@ def execute(self, action, action_input=None):
         elif side == "right":
             robotArm = robot.rightArm
             self.arm = robot.rightArm
-
+    
         if arm_action == "prepare_grasp":
             self.arm.send_joint_goal(-0.2, -0.044, 0.69, 1.4, -0.13, 0.38, 0.42)
 
@@ -130,7 +130,7 @@ def execute(self, action, action_input=None):
             goal_bl = states.util.transformations.tf_transform(goal_map, "/map", "/base_link", tf_listener=self.tf_listener)
             if goal_bl == None:
                 result = "failed"
-            elif self.arm.send_goal(goal_bl.x, goal_bl.y, goal_bl.z, 0, 0, 0,
+            elif self.arm.send_goal(goal_bl.x, goal_bl.y, goal_bl.z, 0, 0, 0, 
                 frame_id="/base_link",
                 time_out=20,
                 pre_grasp=True,
@@ -152,10 +152,10 @@ def execute(self, action, action_input=None):
             transitions = ['grab_succeeded', 'grab_failed','target_lost']
 
         #elif arm_action == "to_joint_pose"  TODO!!
-
+    
         if arm_action == "lift" or arm_action == "retract" or arm_action == "grasp":
             result = execute_smach_state(self, state, transitions)
-        if arm_action == "lift" or arm_action == "retract" or arm_action == "to_pre_grasp_point":
+        if arm_action == "lift" or arm_action == "retract" or arm_action == "to_pre_grasp_point":            
             if result == "succeeded":
                 rospy.loginfo("[AG] Arm movement succeeded.")
             elif result == "failed":
@@ -194,8 +194,8 @@ def execute(self, action, action_input=None):
             self.rightArm.send_gripper_goal(0)     #open
         elif side == "both" and state == "close":
             self.leftArm.send_gripper_goal(1)      #open
-            self.rightArm.send_gripper_goal(1)     #open
-
+            self.rightArm.send_gripper_goal(1)     #open        
+    
     ### HEAD ###
 
     elif action == "head":
@@ -210,12 +210,12 @@ def execute(self, action, action_input=None):
             self.head.send_goal(lookat_point)
 
         # Check if correct action names have been used:
-        if not (head_action == "reset" or head_action == "send_goal"):
+        if not head_action == "reset" or head_action == "send_goal":
             rospy.logwarn("[AG] Head action name is wrong! Have a look at it!")
 
     ### SPINDLE ###
 
-    elif action == "spindle":
+    elif action == "spindle": 
         spindle_action = str(action_input[0])
         waittime = float(action_input[1])
 
@@ -229,7 +229,7 @@ def execute(self, action, action_input=None):
             self.spindle.send_goal(spindle_target,waittime=waittime)
         elif spindle_action == "send_goal_laser":
             z = float(action_input[2])
-            self.spindle.send_laser_goal(z,waittime)
+            self.spindle.send_laser_goal(z,waittime)        
         elif spindle_action == "high":
             self.spindle.send_goal(self.spindle.upper_limit, waittime=waittime)
         elif spindle_action == "medium":
@@ -243,7 +243,7 @@ def execute(self, action, action_input=None):
 
     ### NAVIGATION ###
 
-    elif action == "navigate_generic":
+    elif action == "navigate_generic": 
         nav_action = str(action_input[0])
 
         #rospy.loginfo("[AG] action = '{0}'".format(nav_action))
@@ -289,7 +289,7 @@ def execute(self, action, action_input=None):
 
     ### PERCEPTION ###
 
-    elif action == "perception_recognition":
+    elif action == "perception_recognition": 
         perception_action = str(action_input[0])
 
         #rospy.loginfo("[AG] perception_action = '{0}'".format(perception_action))
@@ -365,6 +365,167 @@ def execute(self, action, action_input=None):
         if not (perception_action == "object" or perception_action == "face" or perception_action == "object_and_face" or perception_action == "laser_2d"):
             rospy.logwarn("[AG] Perception action name is wrong! Have a look at it!")
 
+    return "done"
+
+
+class GetActionThread (threading.Thread):
+    def __init__(self, threadID, name, robot):
+        threading.Thread.__init__(self)
+        self.threadID = threadID
+        self.name = name
+        self.robot = robot
+        self.action_number = 1
+
+    def stop(self):
+        self.__stop = True
+
+    def run(self):
+        print "Starting " + self.name
+        action = "initial" 
+
+        while not action == "done" and not rospy.is_shutdown():
+            ## Query task list: indigolog_plan(X)
+            # indigolog_plan_query = robot.reasoner.query(Compound("indigolog_plan", "X"))
+
+            # if indigolog_plan_query:
+                
+            #     indigolog_plan = [(answer["X"]) for answer in indigolog_plan_query]       
+            #     plan = min(indigolog_plan)
+            #     rospy.loginfo("plan is {0}".format(plan))
+
+            # Query for indigolog_plan(X) but also action(step) during testing
+            answer_query = self.robot.reasoner.query(Compound("get_action", "Action", "Action_input"))
+
+            if not answer_query:
+                rospy.loginfo("[AG] No action found")
+
+            else:
+                rospy.loginfo("[AG] Action found!!")
+
+                action_answers = [(answer["Action"], answer["Action_input"]) for answer in answer_query]       
+                #rospy.loginfo("[AG] action_answers = {0}".format(action_answers))
+                action, action_input = action_answers[0]
+
+                rospy.loginfo("[AG] Action to perform = {0} ".format(action))
+                rospy.loginfo("[AG] Detail action = {0} ".format(action_input[0]))
+
+                action = action.get_string()
+
+                thread = get_action_thread(robot,action,action_input)
+                thread.setDaemon(True)
+                thread.start()
+
+                rospy.loginfo("[AG] Executed action is removed from plan, delete this part when IndiGolog is used")
+                self.robot.reasoner.query(Compound("rm_exec_action_from_plan", "X"))
+            
+                rospy.loginfo("[AG] Ready for next action")
+
+            rospy.sleep(1)
+
+        print "Exiting " + self.name
+
+
+def get_action_thread(self, action, action_input):
+    self.action = action
+    robot = self
+
+    if self.action == "arm":
+        side = str(action_input[1])
+        if side == "left":
+            name = "thread_armleft"
+            check_thread_running(robot,name)
+            thread = ExecuteActionThread(2, name, robot, action, action_input)
+        elif side == "right":
+            name = "thread-armright"
+            check_thread_running(robot,name)
+            thread = ExecuteActionThread(3, name, robot, action, action_input)
+
+    elif self.action == "say":
+        name = "thread_say"
+        check_thread_running(robot,name)
+        thread = ExecuteActionThread(4, name , robot, action, action_input)
+
+    elif self.action == "gripper":
+        side = str(action_input[0])
+        if side == "left":
+            name = "thread_gripper_left"
+            check_thread_running(robot,name)
+            thread = ExecuteActionThread(5, name, robot, action, action_input)
+        elif side == "right":
+            name = "thread_gripper_right"
+            check_thread_running(robot,name)
+            thread = ExecuteActionThread(6, name, robot, action, action_input)
+
+    elif self.action == "head":
+        name = "thread_head"
+        check_thread_running(robot,name)
+        thread = ExecuteActionThread(7, name, robot, action, action_input)
+
+    elif self.action == "spindle":
+        name = "thread_spindle"
+        check_thread_running(robot,name)
+        thread = ExecuteActionThread(8, name, robot, action, action_input)
+
+    elif self.action == "navigate_generic":
+        name ="thread_navigate"
+        check_thread_running(robot,name)
+        thread = ExecuteActionThread(9, name, robot, action, action_input)
+
+    elif self.action == "perception_recognition":
+        name ="thread_perception"
+        check_thread_running(robot,name)
+        thread = ExecuteActionThread(10, name, robot, action, action_input)   
+
+    self.reasoner.assertz(Compound("thread_ready_for_execution", name))
+
+    return thread
+
+def check_thread_running(self, name):
+    self.robot = self
+
+    thread_running = self.robot.reasoner.query(Compound("thread_running", name))
+
+    if thread_running:
+        thread_runs = True
+        while thread_runs:
+            thread_running = self.robot.reasoner.query(Compound("thread_running", name))
+            if thread_running:
+                rospy.loginfo("[AG] Thread is already busy.")
+                rospy.sleep(1)
+            else:
+                rospy.loginfo("[AG] Thread has finished.")
+                thread_runs = False
+    else:
+        rospy.loginfo("[AG] Thread is not busy.")
+
+    return
+
+
+class ExecuteActionThread (threading.Thread):
+    def __init__(self, threadID, name, robot, action, action_input):
+        threading.Thread.__init__(self)
+        self.threadID = threadID
+        self.name = name
+        self.robot = robot
+        self.action = action
+        self.action_input = action_input
+
+    def stop(self):
+        self.__stop = True
+
+    def run(self):
+
+        print "Starting " + self.name
+
+        self.robot.reasoner.query(Compound("retractall", Compound("thread_ready_for_execution", self.name)))    
+        self.robot.reasoner.assertz(Compound("thread_running", self.name))
+        
+        execute(self.robot, self.action, self.action_input)
+
+        print "Exiting " + self.name
+        self.robot.reasoner.query(Compound("retractall", Compound("thread_running", self.name)))   
+
+
 if __name__ == "__main__":
 
     rospy.init_node('atomic_grounding_executioner')
@@ -376,46 +537,18 @@ if __name__ == "__main__":
     init_retract_facts(robot)
 
     rospy.loginfo("[AG] Initialized")
-    action = "initial"
 
-    robot.reasoner.query(Compound("indigolog","demo_seq_test"))
+    rospy.logwarn("[AG] If IndiGolog is loaded, uncomment query util_next")
 
-    while not action == "done" and not rospy.is_shutdown():
-        ## Query task list: indigolog_plan(X)
-        # indigolog_plan_query = robot.reasoner.query(Compound("indigolog_plan", "X"))
+    # Create new threads
+    main_thread = GetActionThread(1, "Main_thread-1", robot)
 
-        # if indigolog_plan_query:
+    # Start Main Thread
+    main_thread.start()
 
-        #     indigolog_plan = [(answer["X"]) for answer in indigolog_plan_query]
-        #     plan = min(indigolog_plan)
-        #     rospy.loginfo("plan is {0}".format(plan))
-
-        # Query for indigolog_plan(X) but also action(step) during testing
-        answer_query = robot.reasoner.query(Compound("get_action", "Action", "Action_input"))
-
-        if not answer_query:
-            rospy.loginfo("[AG] No action found")
-
-        else:
-            rospy.loginfo("[AG] Action found!!")
-
-            action_answers = [(answer["Action"], answer["Action_input"]) for answer in answer_query]
-            #rospy.loginfo("[AG] action_answers = {0}".format(action_answers))
-            action, action_input = action_answers[0]
-
-            rospy.loginfo("[AG] Action to perform = {0} ".format(action))
-            rospy.loginfo("[AG] Detail action = {0} ".format(action_input[0]))
-
-            action = action.get_string()
-
-            execute(robot, action, action_input)
-
-            rospy.loginfo("[AG] Executed action is removed from plan, delete this part when IndiGolog is used")
-            indigolog_plan_query = robot.reasoner.query(Compound("rm_exec_action_from_plan", "X"))
-
-            rospy.loginfo("[AG] Asserting success")
-            robot.reasoner.query(Compound("assert_done", "success"))
-
-            rospy.loginfo("[AG] Ready for next action")
-
+    while not rospy.is_shutdown():
+        #thread_list = threading.enumerate()
+        #rospy.loginfo("[AG] thread list: {0}".format(thread_list))
         rospy.sleep(1)
+
+    main_thread.stop()

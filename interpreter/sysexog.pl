@@ -15,6 +15,7 @@ exog_action(break_exec). % Pause the execution of the program
 exog_action(reset_exec). % Reset agent execution from scratch
 exog_action(start_exec). % Start the execution of the program
 
+
 %% This are special actions that if they are in the current history
 %% they are interpreted by the interpreter in a particular way
 %% This should be seen as meta-actions that deal with the interpreter itself
