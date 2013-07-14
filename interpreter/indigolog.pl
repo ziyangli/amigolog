@@ -31,6 +31,12 @@
         senses/2,
 
         indigolog_plan/1, 
+        indigolog_action/1, 
+        excuting_action/1, 
+        excuting_action/4, %% assert the current action so that Python can query
+        action_counter/1,  %% just a counter
+
+        
 
         currently/2, 
         has_valc/3,  %% store cached fluent (F, V, H)
@@ -105,6 +111,8 @@ indigo2(H, E, [wait|H]) :-
         indigo(E, H2).
 indigo2(H,E,[stop_interrupts|H]) :- !, 
 	indigo(E,[stop_interrupts|H]).
+indigo2(H, E, par([A1, A2])) :-
+        indigo(E, [A1, A2, H]). 
 indigo2(H, E, [A|H]) :-
         indixeq(A, H, H1), %% execute domain action
         indigo(E, H1).
@@ -208,20 +216,16 @@ doWaitForExog(H1,H2):-
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% History
-        
-%% -- before(?History1, ?History2)
-%%    success if History1 is a previous hsitory of History2
-before(H1, H2) :- append(_, H1, H2).
 
-%% -- pasthist(-History)
-%%    History is a past situation w.r.t. the actual situation
-pasthist(H) :- now(H2), before(H, H2).
+%% -- handle_olling(+History1, -History2)
+%%    mandatory rolling forward
+handle_rolling(H1,H2) :- must_roll(H1), !, roll(H1, H2).
+handle_rolling(H1,H1).
 
-%% -- update_now(+History)
-%%    updates the current History
-update_now(H) :-
-        retractall(now(_)),
-        assert(now(H)).
+%% -- pause_or_roll(+Histroy1, -History2)
+%%    optional rolling forward
+pause_or_roll(H1,H2) :- can_roll(H1), !, roll(H1, H2).
+pause_or_roll(H1,H1).
 
 %% -- roll_parameters(L, M, N)
 %%    define parameters for roll/2
@@ -235,7 +239,61 @@ update_now(H) :-
 must_roll(H) :- roll_parameters(_,M,N), length(H,L1), L1 > M, N>0.
 can_roll(H)  :- roll_parameters(L,_,N), length(H,L1), L1 > L, N>0.
 
-clean_cache :- retractall(has_valc(_,_,_)).
+%%  Rolling forward means advancing the predicate currently(-,-) and
+%%  discarding the corresponding tail of the history.
+%% -- roll(+History1, -History2)
+roll(H1, H2) :-
+        report_message(system(0),'Progressing the database.......'), 
+	roll_db(H1, H2), 
+        report_message(system(0), 'Done progressing the database!'),
+        report_message(system(3), ['New History is:', H2]),
+	update_now(H2),         %% Update the current history	
+	append(H2,HDropped,H1),	%% Extract what was dropped from H1
+	retract(rollednow(HO)), %% Update the rollednow/1 predicate to store all that has been rolled forward
+	append(HDropped,HO,HN),
+	assert(rollednow(HN)).
+
+%% -- roll_db(+History1,-History2)
+%%    roll from History1 to History2
+%%    History1 is the current history (H1 = H2 + H3)
+%%    Histroy2 will be the new history
+roll_db(H1,H2) :- 
+	roll_parameters(_,_,N), 
+	split(N,H1,H2,H3), %% H3 is the tail of H1 that is going to be dropped
+        report_message(system(3), ['(DB)', 'Progressing the following sub-history:', H3]), 
+	preserve(H3),
+        report_message(system(3), ['(DB)', 'Updating cache...']), 
+	update_cache(H3),
+        %% show_currently, 
+        report_message(system(3), ['(DB)', 'Subhistory completely rolled forward']).
+
+%% -- preserve(H)
+%%    rolls forward the initial database currently/2 from [] to H
+preserve([]).
+preserve([A|H]) :-
+        preserve(H), %% handle tail first
+        report_message(system(4), ['Rolling action', A]), 
+        roll_action(A).
+
+roll_action(A) :-
+        causes_val(A, F, V, P), holds(P, []), %% Note: V is grounded by evaluating P
+        %% clean the cache info generated during evaluating P
+        clean_cache([]),                      
+        report_message(system(6), ['Action', A, 'changed', F, 'to', V]),
+        assert(temp(F, V)),
+        fail.
+roll_action(e(A, V)) :-
+        senses(A, F),
+        report_message(system(6), ['Sensing action', A, 'changed', F, 'to', V]),
+        retractall(currently(F, _)), %% in fact, sensed fluents usually do not have initial value
+        assert(currently(F, V)),
+        fail.   
+roll_action(_) :- %% handle all the temp/2
+	retract(temp(F,V)),
+	retractall(currently(F,_)),
+	assert(currently(F,V)),
+	fail.
+roll_action(_).
 
 %% -- update_cache(+Htail)
 %%    update the cache information by stripping out the subhistory Htail
@@ -246,57 +304,14 @@ update_cache(Htail) :-
 	fail.
 update_cache(_).
 
-% %% -- roll_action_fluent(+Action, ?Fluent)
-% %%    Fluent requires update wrt executed Action
-% %%    at this point Fluent may still contain free var
-% roll_action_fluent(A, F) :-
-% 	has_val_reg(F, V, [A]), %% compute one possible value for F (now F is ground)
-% 	(\+ temp(F, V) -> assert(temp(F, V)) ; true), %% if new value, put it in temp/2
-% 	fail. %% with fail, will go directly to the next rule instead from the beginning.
-% roll_action_fluent(_, F) :- %% now update currently/2 with the just computed temp/2
-% 	temp(F, _),
-% 	retractall(currently(F,_)),
-%         %% F needs a full update, remove all currently/2
-%         %% Next obtain all values stored in temp/2 for that specific ground F
-% 	temp(F,V), %% Get a new possible value (maybe many, backtrack)
-% 	assert(currently(F,V)), %% Set the new possible value in currently/2
-% 	retract(temp(F,V)), %% Remove the new possible value from temp/2
-% 	fail.
-% roll_action_fluent(_, _).
+clean_cache    :- retractall(has_valc(_,_,_)).
+clean_cache(H) :- retractall(has_valc(_, _, H)).
 
-%% -- roll_action(A)
-%%    roll currently/2 database with respect to action A
-% roll_action(e(A,V)) :-
-%         senses(A,F),
-%         retractall(currently(F, _)),
-%         assert(currently(F, V)),
-%         fail.
-% roll_action(A) :-
-%         causes_val(A, F, _, _),
-% 	roll_action_fluent(A, F),
-% 	fail.
-roll_action(A) :- %% TODO: what kind of actions?
-	sets_val(A, F, V, []),
-        %%% TEST: ziyang
-        report_message(system(5), ['Action', A, 'changed', F, 'to', V]), 
-	(\+ temp(F, V) -> assert(temp(F, V)) ; true),
-	fail.
-roll_action(_) :- %% handle all the temp/2
-	retract(temp(F,V)),
-	retractall(currently(F,_)), %% There should be just one currently/2 for F!
-	assert(currently(F,V)),
-	fail.
-roll_action(_).
-
-%% -- preserve(H)
-%%    rolls forward the initial database currently/2 from [] to H
-preserve([]).
-preserve([A|H]) :-
-        preserve(H), %% handle tail first
-        report_message(system(4), ['Rolling action', A]), 
-        roll_action(A), show_cache.
-        %% update_cache([A]). %% TODO: ?why update_cache here
-%%    [go_school, eat, clean, get_up] is a good example
+%% -- update_now(+History)
+%%    updates the current History
+update_now(H) :-
+        retractall(now(_)),
+        assert(now(H)).
 
 %% -- split(+N, History1, History2, History3)
 %%    succeeds if append(History2,History3,History1) and length(Histroy2)==N
@@ -304,44 +319,13 @@ split(0,H,[],H) :- ! .
 split(N,[A|H],[A|H1],H2) :- N > 0, N1 is N-1, split(N1,H,H1,H2).
 %% ?- split(2, [a, b, c, d, e], [a, b], [c, d, e]).
 
+%% -- before(?History1, ?History2)
+%%    success if History1 is a previous hsitory of History2
+before(H1, H2) :- append(_, H1, H2).
 
-%% -- roll_db(+History1,-History2)
-%%    roll from History1 to History2
-%%    History1 is the current history (H1 = H2 + H3)
-%%    Histroy2 will be the new history
-roll_db(H1,H2) :- 
-	roll_parameters(_,_,N), 
-	split(N,H1,H2,H3), %% H3 is the tail of H1 that is going to be dropped
-        report_message(system(3), ['(DB) ', 'Progressing the following sub-history: ', H3]), 
-	preserve(H3),
-        report_message(system(3), ['(DB) ', 'Updating cache...']), 
-	update_cache(H3), %% Update the cache information
-        show_currently, 
-        report_message(system(3), ['(DB) ', 'Subhistory completely rolled forward']).
-
-%%  Rolling forward means advancing the predicate currently(-,-) and
-%%  discarding the corresponding tail of the history.
-%% -- roll(+History1, -History2)
-roll(H1, H2) :-
-        report_message(system(0),'Rolling down the river (progressing the database).......'), 
-	roll_db(H1, H2), 
-        report_message(system(0), 'done progressing the database!'), 
-        report_message(system(3), ['New History: ', H2]), 
-	update_now(H2),         %% Update the current history	
-	append(H2,HDropped,H1),	%% Extract what was dropped from H1
-	retract(rollednow(HO)), %% Update the rollednow/1 predicate to store all that has been rolled forward
-	append(HDropped,HO,HN), %% rollednow(H): H is the full system history
-	assert(rollednow(HN)).
-
-%% -- handle_olling(+History1, -History2)
-%%    mandatory rolling forward
-handle_rolling(H1,H2) :- must_roll(H1), !, roll(H1, H2).
-handle_rolling(H1,H1).
-
-%% -- pause_or_roll(+Histroy1, -History2)
-%%    optional rolling forward
-pause_or_roll(H1,H2) :- can_roll(H1), !, roll(H1, H2).
-pause_or_roll(H1,H1).
+%% -- pasthist(-History)
+%%    History is a past situation w.r.t. the actual situation
+pasthist(H) :- now(H2), before(H, H2).
 
 show_currently :-
         currently(F, V),
@@ -368,16 +352,16 @@ rdomain(V, D) :-
             bagof(P,apply(D,[P]),L)),
         shuffle(L,L2), !, member(V, L2).
 
-
-%% SPECIAL PROJECTOR CASES FOR SYSTEM-WIDE FLUENTS
+%% SPECIAL PROJECTOR CASES FOR SYSTEM-WIDE FLUENTS 
 holds(neg(interrupts_running),H)  :- !, \+ holds(interrupts_running,H).
 holds(interrupts_running,H)       :- !, \+ (H=[stop_interrupts|_]).
 
 %% -- holds(+Condition,+H)
 %%    Condition holds in H (i.e., Condition is possibly true at H)
 
-%% negation normal form transformation %% Loyd-Topor Transforamtion
-%% Define these for performance??? 
+%% negation normal form transformation
+%% Loyd-Topor Transforamtion
+
 holds(neg(or(P1,P2)),H)   :- !, holds(and(neg(P1),neg(P2)),H).
 holds(neg(and(P1,P2)),H)  :- !, holds(or(neg(P1),neg(P2)),H). 
 holds(neg(neg(P)),H)      :- !, holds(P,H). 		
@@ -388,7 +372,7 @@ holds(neg(P),H)           :- proc(P,P1), !, holds(neg(P1), H).
 %% non-atomic formulas
 holds(and(P1,P2),H)  	:- !, holds(P1,H), !, holds(P2,H).
 holds(or(P1,P2),H)   	:- !, ((holds(P1,H),!) ; (holds(P2,H),!)).
-holds(some(V,D,P),H)    :- !, domain(O,D), subv(V,O,P,P1), holds(P1,H). %% After introducing domain, we always have grounded Condition to check
+holds(some(V,D,P),H)    :- !, domain(O,D), subv(V,O,P,P1), holds(P1,H).
 %% success when you can find one O such that P1 does not hold
 holds(some(V,P),H)	:- !, subv(V,_,P,P1), holds(P1,H).
 holds(neg(some(V,P)),H)   :- !, \+ holds(some(V,P), H).
@@ -569,8 +553,6 @@ trans(followpath(E,_),H,E1,H1) :- trans(search(E),H,E1,H1). %% redo search
 %%    call P and return true or false
 trans(query(P, S), H, [], H) :- call(P) -> S=true; S=failed.
 
-%% trans(par(E1, E2), H, [], H1) :- trans(E1, H, [], )
-
 %% Wait and commit are two "meta" actions.
 %% wait action tells the interpreter to wait until an exogenous action arrives
 %% commit is used in search and searchc to commit to the plan computed so far
@@ -603,11 +585,17 @@ trans(ndet(E1,E2),H,E,H1)     :-
             (trans(E1,H,E,H1); trans(E2,H,E,H1));
             (trans(E2,H,E,H1); trans(E1,H,E,H1))).
 
+%% -- par(A1,A2)
+%%    parallel execution of two primitive actions
+%%    Note: only use carefully with primitive actions. Otherwise is buggy.
+final(par(A1,A2),H)               :- final(A1,H), final(A2,H).
+trans(par(A1,A2),H,Eo,[par(A1,A2)|H]) :- trans(A1,H,[],H1), trans(A2,H1,Eo,_).
+
 %% -- rconc(E1,E2)
 %%    random concurrency on 2 programs
 final(rconc(E1,E2),H) :- final(E1,H), final(E2,H).
 trans(rconc(E1,E2),H,rconc(E11,E22),H1) :- 
-        ( random(1, 3, 1) -> 	% flip a coin!
+        ( random(1, 3, 1) -> %% flip a coin!
             ((trans(E1,H,E11,H1), E22=E2); (trans(E2,H,E22,H1), E11=E1));
             ((trans(E2,H,E22,H1), E11=E1); (trans(E1,H,E11,H1), E22=E2)) ).
 
@@ -718,13 +706,14 @@ trans(star(E,1),H,E1,H1)               :- !, trans(E,H,E1,H1).
 trans(star(E,N),H,[E1,star(E,M)],H1)   :- N>1, trans(E,H,E1,H1), M is N-1.
 trans(star(E),H,[E1,star(E)],H1)       :- trans(E,H,E1,H1).
 
-
 %% LAST FINAL
 final([E|L],H)       :- final(E,H), final(L,H).
 final(E,H)           :- proc(E,E2), !, final(E2,H).
 final([],_).
 
+%% 1. normal trans
 trans([E|L],H,[E1|L],H2)  :- trans(E,H,E1,H2).
+%% 2. when the head is empty (resulted from previous success trans)
 trans([E|L],H,E1,H2)      :- \+ L=[], final(E,H), trans(L,H,E1,H2).
 
 %% LAST TRANS FOR PROCEDURES AND PRIMITIVE ACTIONS (everything else failed)
@@ -758,72 +747,117 @@ trans(E,H,[],[E1|H]) :-
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Execution
-%% -- indixeq(H1,H2,H3)
-%%    short for indigolog execution?? Implementation of execution of an action.
-%%    H1 is the original history, H2 is H1 with the new action to be executed
-%%    and H3 is the resulting history after executing such new action.
-
-% % (1) - No action was performed so we dont execute anything
-% indixeq(H,H,H).
-% % (2) - The action is not a sensing one: execute and ignore its sensing
-% indixeq(H,[Act|H],[Act|H]) :- \+ senses(Act,_), execute(Act,_), assertz_action(Act).
-% % (3) - The action is a sensing one for fluent F: execute sensing action
-% indixeq(H,[Act|H],[e(F,Sr),Act|H]) :- senses(Act,F), execute(Act,Sr), assertz_action(Act).
-
-%% -- execute(Act, Sr) :- ask_execute(Act, Sr).
-%% -- ask_execute(Act,Sr) :-
-%%         update_count(M),         
-%%         write('Step '), write(M), write(' is '), write(Act), write('.'), 
-%%         senses(Act, _)
-%%         % senses(Act, Fluent)
-%% 	->
-%%         (nl,
-%%      %%   (write('Queried value for '), write(Fluent), write(' is:'), Query=..[Fluent, Sr], Sr=call(Query))
-%% 	write('sensing input for '), write(Act), write(':'), read_action(Sr))
-%% 	;
-%% 	nl.
-
-:- dynamic
-        indigolog_action/1,
-        excuting_action/1, 
-        excuting_action/4, %% assert the current action so that Python can query
-        action_counter/1.  %% just a counter
+%% -- indixeq(+ActL,+H1,-H2)
+%%    indigolog execution
+%%    H1 is the original history, H2 is H1 with the new executed actions
 
 
-refresh_counter :- retractall(action_counter(_)), assertz(action_counter(0)).
+%% 1. execution of system actions
+%%    just add it to history
+indixeq(Act, H, H2) :-
+        type_action(Act, system), !, %% Act=e(_,_)
+        H2 = [Act|H],
+        update_now(H2).
+%% 2. execution of sensing actions
+indixeq(Act, H, H2) :- 
+        type_action(Act, sensing), !,
+        report_xeq(sensing, Act),         
+        execute_action(Act, H, sensing, S), !,
+        (S=failed ->
+            report_err(Act, H),
+            %% request abortion of program, next time transfinal will receive abort!!!
+            H2 = [abort, failed(Act)|H], 
+            update_now(H2)
+        ;
+            report_suc(Act), 
+            wait_if_neccessary,
+            %% add sensing outcome!
+            handle_sensing(Act, [Act|H], S, H2), 
+            update_now(H2)).
+%% 3. execution of parallel actions
+indixeq(par(A1, A2), H, H2) :-
+        type_action(par(A1, A2), parallel), !,
+        report_xeq(parallel, (A1, A2)), 
+        execute_action([A1, A2], H, parallel, S), !,
+        (S=failed ->
+            report_err((A1, A2), H),
+            H2 = [abort, failed(A2, A1)|H],
+            update_now(H2)
+        ;
+            report_suc((A1,A2),S), 
+            wait_if_neccessary,
+            H2=[A2,A1,H],
+            update_now(H2)).
+%% 4. execution of nonsensing actions
+indixeq(Act, H, H2) :-
+        type_action(Act, nonsensing), !,
+        report_xeq(nonsensing, Act), 
+        execute_action(Act, H, nonsensing, S), !, 
+        (S=failed ->
+            report_err(Act, H), 
+            H2 = [abort, failed(Act)|H],
+            update_now(H2)
+        ;
+            report_suc(Act, S), 
+            wait_if_neccessary,
+            H2 = [Act|H],
+            update_now(H2)).
+                
+%% -- execute_action(+AL,+H,+Type,-Outcome)
+%% 1. parallel actions
+execute_action([A1, A2], _, parallel, Outcome) :-
+        update_counter(_),
+        assert(executing_action([A1, A2])),
+        (thread_get_message(got_sensing(A2, Ob1)),
+        thread_get_message(got_sensing(A1, Ob2));
+         thread_get_message(got_sensing(A1, Ob1)),
+        thread_get_message(got_sensing(A2, Ob2))), 
+        retract(executing_action(_)),
+        Outcome = [Ob1|Ob2], 
+        report_message(system(2), ['Action *', (A1, A2), '* completed with outcome:', Outcome]).
+%% 2. other actions
+execute_action(Action, H, Type, Outcome) :-
+        %% Increment action counter by 1 and store action information
+	update_counter(N), 
+        assert_execution(N,Action,Type,H), 
+        thread_get_message(got_sensing(Action, Outcome)),
+        clean_execution(N).
 
-update_counter(M) :-
-        retract(action_counter(N)),
-        M is N+1, assert(action_counter(M)).
+report_xeq(Type, Act) :-
+        report_message(system(1), ['sending', Type, 'action *', Act, '* for execution.']).
+report_err(Act, H) :-
+        report_message(error, ['action *', Act, '* FAILED to execute at history: ', H]).
+report_suc(Act, S) :-
+        report_message(action, ['action *', Act, '* EXECUTED SUCCESSFULLY with sensing outcome: ', S]).
+
+	% report_message(system(2), 
+	% 	['Action *', (M, Action), '* completed with outcome:', Outcome]).
 
 %% -- type_action(+Action, -Type)
 %%    finds out the type of an action
 type_action(Act, sensing) :- senses(Act); senses(Act, _); senses(Act, _, _, _, _), !.
 type_action(Act, system) :- system_action(Act), !.
+type_action(par(_, _), parallel).
 type_action(_, nonsensing). %% for the rest
 
-:- dynamic 
-    executing_action/1,
-    indigolog_action/1.
+refresh_counter :- retractall(action_counter(_)), assertz(action_counter(0)).
 
-%% -- assert to do action to the database
-assert_action(Act) :-
-        retractall(indigolog_action(_)),
-        retractall(executing_action(_)),
-        assertz(executing_action(Act)),
+%% -- update_counter(-M)
+%%    update the counter and output the current step
+update_counter(M) :-
+        retract(action_counter(N)),
+        M is N+1, assert(action_counter(M)).
+
+%% -- store new actions to execute
+assert_execution(N,Act,Type,H) :-
+	assert(executing_action(N,Action,H,Type)),
+        assertz(executing_action(Act)), 
         assertz(indigolog_action(Act)).
 
 %% -- 
-execute_action(Action, H, Type, Outcome) :-
-        %% Increment action counter by 1 and store action information
-	update_counter(M), 
-	assert(executing_action(M, Action, H, Type)), %% Store new action to execute
-        assert_action(Action), %% maybe duplicate
-        thread_get_message(got_sensing(Action, Outcome)),
-	retract(executing_action(M, _, _, _)),
-        retract(executing_action(_)),
-	report_message(system(2), 
-		['Action *', (M, Action), '* completed with outcome:', Outcome]).
+clean_execution(N) :-
+        retract(executing_action(N,_,_,_)),
+        retract(executing_action(_)).
 
 %% -- handle_sensing(+Action, +[Action|History], +Value, -NewHistory)
 %%    change the NewHistory to encode the sensing result of Action
@@ -834,36 +868,6 @@ handle_sensing(Act, [Act|H], Sr, [e(F, Sr), Act|H]) :- senses(Act,F).
 % %%    3. not used senses/5
 % handle_sensing(Act, [Act|H], Sr, [e(F, Sr), Act|H]) :- senses(Act,Sr,F,_,_). %% only add the sensing result to the history, no need to validate condition
 
-indixeq(Act, H, H2) :- %% execution of system actions -- just add it to history
-        type_action(Act, system), !, %% e(_,_) are system actions!!!
-        H2 = [Act|H],
-        update_now(H2).
-indixeq(Act, H, H2) :- %% execution of sensing actions
-        type_action(Act, sensing), !,
-        report_message(system(1), ['Sending sensing Action *', Act, '* for execution.']),
-        execute_action(Act, H, sensing, S), !, %% do we really need to execute or just check the database??? 
-        (S=failed ->
-            report_message(error, ['Action *', Act, '* FAILED to execute at history: ', H]),
-            H2 = [abort, failed(Act)|H], %% request abortion of program, next time transfinal will receive abort!!!
-            update_now(H2)
-        ;
-            report_message(action, ['Action *', Act, '* EXECUTED SUCCESSFULLY with sensing outcome: ', S]),
-            wait_if_neccessary,
-            handle_sensing(Act, [Act|H], S, H2), %% add sensing outcome!
-            update_now(H2)).
-indixeq(Act, H, H2) :- %% execution of nonsensing actions
-        type_action(Act, nonsensing), !,
-        report_message(system(1), ['Sending nonsensing action *', Act, '* for execution.']),
-        execute_action(Act, H, nonsensing, S), !, 
-        (S=failed ->
-            report_message(error, ['Action *', Act, '* could not be executed at history: ', H]),
-            H2 = [abort, failed(Act)|H],
-            update_now(H2)
-        ;
-            report_message(action, ['Action *', Act, '* COMPLETED SUCCESSFULLY.']),
-            wait_if_neccessary,
-            H2 = [Act|H],
-            update_now(H2)).
 
 %% Mapping
 :- dynamic

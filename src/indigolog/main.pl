@@ -37,13 +37,16 @@ util_next :- thread_send_message(indigolog_thread, next_step).
 
 util_exog :- thread_send_message(indigolog_thread, request(table(4), 3)).
 
-util_feedback(Act, Result) :-
-        executing_action(Act),
-        thread_send_message(indigolog_thread, got_sensing(Act, Result)).
+util_feedback(Result) :-
+        executing_action(A),
+        is_list(A),
+        A = [A1|A2], 
+        thread_send_message(indigolog_thread, got_sensing(A1, Result)), 
+        thread_send_message(indigolog_thread, got_sensing(A2, Result)), !.
 
 util_feedback(Result) :-
         executing_action(Act),
-        thread_send_message(indigolog_thread, got_sensing(Act, Result)).
+        thread_send_message(indigolog_thread, got_sensing(Act, Result)), !.
 
 util_exog(ExogAct) :-
         exog_action_occurred([ExogAct]).
@@ -63,16 +66,21 @@ util_exog(ExogAct) :-
 % currently(light(3), on).
 % cache(light(_)).
 
-roll_parameters(5, 10, 2).
+roll_parameters(3, 5, 2).
 
 prim_fluent(test_counter).
 initially(test_counter, 0).
 %% currently(test_counter, 0).
 cache(test_counter).
 
+prim_fluent(counter_2).
+initially(counter_2, 100).
+
+
 prim_action(add_count).
-poss(add_count, true).
+poss(add_count, test_counter<1000).
 causes_val(add_count, test_counter, V, V is test_counter+1).
+causes_val(add_count, counter_2, V, V is counter_2-1).
 
 proc(on_off_combine_test,
      [search([star(add_count, 10), ?(test_counter=4), go_table(1)], 'searching message.'),
@@ -118,3 +126,6 @@ poss(del_count, false).
 proc(ndet_test, ndet([add_count, del_count], [add_count, add_count])).
 proc(rpi_test, rpi(X, [1, 2, 3], star(add_count(X), 1))).
 proc(star_test, star(add_count, 1)).
+
+proc(roll_action_test, [add_count, add_count, add_count, add_count, add_count, add_count, add_count]).
+proc(par_test, [add_count, par(add_count, add_count), add_count]).
