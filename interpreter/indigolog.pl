@@ -25,18 +25,10 @@
         wait_at_action/1, %% wait some seconds after EACH action
 
         indi_exog/1, %% store exog events not managed yet
-        
-        senses/1,
-        senses/5, 
-        senses/2,
-
-        indigolog_plan/1, 
-        indigolog_action/1, 
+                
         excuting_action/1, 
         excuting_action/4, %% assert the current action so that Python can query
         action_counter/1,  %% just a counter
-
-        
 
         currently/2, 
         has_valc/3,  %% store cached fluent (F, V, H)
@@ -53,6 +45,13 @@
 
         exog_action/1,
         system_action/1,
+
+        senses/1,
+        senses/5, 
+        senses/2,
+
+        fails/2, %% exog. action Act fails Action
+        rescues/2, %% proc. P resuces Action
         
         initially/2.
 
@@ -111,11 +110,12 @@ indigo2(H, E, [wait|H]) :-
         indigo(E, H2).
 indigo2(H,E,[stop_interrupts|H]) :- !, 
 	indigo(E,[stop_interrupts|H]).
-indigo2(H, E, par([A1, A2])) :-
-        indigo(E, [A1, A2, H]). 
-indigo2(H, E, [A|H]) :-
-        indixeq(A, H, H1), %% execute domain action
-        indigo(E, H1).
+indigo2(H,E,[A|H]) :-
+        indixeq(A,H,H1,P), %% execute domain action
+        (ground(P) -> 
+            indigo([P,E],H1)
+        ;
+            indigo(E, H1)).
 
 %% -- mayEvolve(E1,H1,E2,H2,S)
 %%    perform transition from (E1,H1) to (E2,H2) with result S
@@ -173,6 +173,140 @@ reset_indigolog_dbs :-
         assert(rollednow([])).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Execution
+%% -- indixeq(+ActL,+H1,-H2)
+%%    indigolog execution
+%%    H1 is the original history, H2 is H1 with the new executed actions
+
+%% 1. execution of system actions
+%%    just add it to history
+indixeq(Act,H,H2,_) :-
+        type_action(Act, system), !, %% Act=e(_,_)
+        H2 = [Act|H],
+        update_now(H2).
+%% 2. execution of sensing actions
+indixeq(Act,H,H2,_) :- 
+        type_action(Act, sensing), !,
+        report_xeq(sensing, Act),         
+        execute_action(Act, H, sensing, S), !,
+        (S=failed ->
+            report_err(Act, H),
+            %% request abortion of program, next time transfinal will receive abort!!!
+            H2 = [abort, failed(Act)|H], 
+            update_now(H2)
+        ;
+            report_done(Act), 
+            wait_if_neccessary,
+            %% add sensing outcome!
+            handle_sensing(Act, [Act|H], S, H2), 
+            update_now(H2)).
+%% 3. execution of parallel actions
+indixeq(par(A1, A2),H,H2,_) :-
+        type_action(par(A1, A2), parallel), !,
+        report_xeq(parallel, (A1, A2)), 
+        execute_action([A1, A2], H, parallel, S), !,
+        (S=failed ->
+            report_err((A1, A2), H),
+            H2 = [abort, failed(A2, A1)|H],
+            update_now(H2)
+        ;
+            report_done((A1,A2),S), 
+            wait_if_neccessary,
+            H2=[A2,A1|H],
+            update_now(H2)).
+%% 4. execution of nonsensing actions
+indixeq(Act,H,H2,P) :-
+        type_action(Act, nonsensing), !,
+        report_xeq(nonsensing, Act), 
+        execute_action(Act, H, nonsensing, S), !, 
+        (S=exog ->
+            rescues(Act,P),
+            handle_exog(H,H2)
+        ;
+            (S=failed ->
+                report_err(Act, H), 
+                H2 = [abort, failed(Act)|H],
+                update_now(H2)
+            ;
+                report_done(Act, S), 
+                wait_if_neccessary,
+                H2 = [Act|H],
+                update_now(H2))).
+
+%% -- type_action(+Action, -Type)
+%%    finds out the type of an action
+type_action(Act, sensing) :- senses(Act); senses(Act, _); senses(Act, _, _, _, _), !.
+type_action(Act, system) :- system_action(Act), !.
+type_action(par(_, _), parallel).
+type_action(_, nonsensing). %% for the rest
+
+%% -- execute_action(+AL,+H,+Type,-Outcome)
+%% 1. parallel actions
+execute_action([A1, A2], H, parallel, Outcome) :-
+        update_counter(N),
+        assert_execution(N,[A1,A2],H,parallel),
+        (thread_get_message(got_sensing(A2, Ob1)),
+            thread_get_message(got_sensing(A1, Ob2))
+        ;
+            thread_get_message(got_sensing(A1, Ob1)),
+            thread_get_message(got_sensing(A2, Ob2))), 
+        clean_execution(N),
+        Outcome = [Ob1,Ob2].
+%% 2. other actions
+execute_action(Act, H, Type, Outcome) :-
+        %% Increment action counter by 1 and store action information
+	update_counter(N), 
+        assert_execution(N,Act,Type,H),
+        repeat,
+        thread_get_message(Message),
+        (Message = exog(ExogAct) ->
+            (fails(ExogAct, Act) ->
+                exog_action_occurred([ExogAct]), 
+                Outcome=exog
+            ;
+                exog_action(ExogAct),
+                exog_action_occurred([ExogAct]),
+                fail)
+        ;
+            Message = got_sensing(Act, Outcome)),
+        clean_execution(N).
+
+report_xeq(Type, Act) :-
+        report_message(system(1), ['sending', Type, 'action *', Act, '* for execution.']).
+report_err(Act, H) :-
+        report_message(error, ['action *', Act, '* FAILED to execute at history: ', H]).
+report_done(Act, S) :-
+        report_message(action, ['action *', Act, '* EXECUTED with sensing outcome: ', S]).
+
+
+refresh_counter :- retractall(action_counter(_)), assertz(action_counter(0)).
+
+%% -- update_counter(-N)
+%%    update the counter and output the current step
+update_counter(N) :-
+        retract(action_counter(M)),
+        N is M+1, assert(action_counter(N)).
+
+%% -- store new actions to execute
+assert_execution(N,Act,Type,H) :-
+	assert(executing_action(N,Act,H,Type)),
+        assertz(executing_action(Act)).
+
+%% -- 
+clean_execution(N) :-
+        retract(executing_action(N,_,_,_)),
+        retract(executing_action(_)).
+
+%% -- handle_sensing(+Action, +[Action|History], +Value, -NewHistory)
+%%    change the NewHistory to encode the sensing result of Action
+%%    1. old way with senses/2
+handle_sensing(Act, [Act|H], Sr, [e(F, Sr), Act|H]) :- senses(Act,F).
+% %%    2. new way with senses/1, effects are defined by settles and rejects
+% handle_sensing(Act, [Act|H], Sr, [e(Act, Sr), Act|H]) :- senses(Act).
+% %%    3. not used senses/5
+% handle_sensing(Act, [Act|H], Sr, [e(F, Sr), Act|H]) :- senses(Act,Sr,F,_,_). %% only add the sensing result to the history, no need to validate condition
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Exogenous events
 %% Exogenous actions are stored in the local predicate indi_exog/1
 %% until they are ready to be incorporated into the history
@@ -185,7 +319,7 @@ exists_pending_exog_event :- indi_exog(_).
 %%    exogenus actions (called from Python executive)
 %%    First we add each exogenous event to the clause indi_exog/1 and
 %%    in the end, if we are performing an evolution step, we abort the step.
-exog_action_occurred([]) :- doing_step -> abortStep ; true.
+exog_action_occurred([]) :- (doing_step -> abortStep ; true), !.
 exog_action_occurred([ExoAction|LExoAction]) :-
         assert(indi_exog(ExoAction)),   
         report_message(exogaction, ['Exog. Action *',ExoAction,'* occurred']),
@@ -744,131 +878,6 @@ trans(E,H,[],[E1|H]) :-
 	poss(E1,P), 
 	holds(P,H).
 
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Execution
-%% -- indixeq(+ActL,+H1,-H2)
-%%    indigolog execution
-%%    H1 is the original history, H2 is H1 with the new executed actions
-
-
-%% 1. execution of system actions
-%%    just add it to history
-indixeq(Act, H, H2) :-
-        type_action(Act, system), !, %% Act=e(_,_)
-        H2 = [Act|H],
-        update_now(H2).
-%% 2. execution of sensing actions
-indixeq(Act, H, H2) :- 
-        type_action(Act, sensing), !,
-        report_xeq(sensing, Act),         
-        execute_action(Act, H, sensing, S), !,
-        (S=failed ->
-            report_err(Act, H),
-            %% request abortion of program, next time transfinal will receive abort!!!
-            H2 = [abort, failed(Act)|H], 
-            update_now(H2)
-        ;
-            report_suc(Act), 
-            wait_if_neccessary,
-            %% add sensing outcome!
-            handle_sensing(Act, [Act|H], S, H2), 
-            update_now(H2)).
-%% 3. execution of parallel actions
-indixeq(par(A1, A2), H, H2) :-
-        type_action(par(A1, A2), parallel), !,
-        report_xeq(parallel, (A1, A2)), 
-        execute_action([A1, A2], H, parallel, S), !,
-        (S=failed ->
-            report_err((A1, A2), H),
-            H2 = [abort, failed(A2, A1)|H],
-            update_now(H2)
-        ;
-            report_suc((A1,A2),S), 
-            wait_if_neccessary,
-            H2=[A2,A1,H],
-            update_now(H2)).
-%% 4. execution of nonsensing actions
-indixeq(Act, H, H2) :-
-        type_action(Act, nonsensing), !,
-        report_xeq(nonsensing, Act), 
-        execute_action(Act, H, nonsensing, S), !, 
-        (S=failed ->
-            report_err(Act, H), 
-            H2 = [abort, failed(Act)|H],
-            update_now(H2)
-        ;
-            report_suc(Act, S), 
-            wait_if_neccessary,
-            H2 = [Act|H],
-            update_now(H2)).
-                
-%% -- execute_action(+AL,+H,+Type,-Outcome)
-%% 1. parallel actions
-execute_action([A1, A2], _, parallel, Outcome) :-
-        update_counter(_),
-        assert(executing_action([A1, A2])),
-        (thread_get_message(got_sensing(A2, Ob1)),
-        thread_get_message(got_sensing(A1, Ob2));
-         thread_get_message(got_sensing(A1, Ob1)),
-        thread_get_message(got_sensing(A2, Ob2))), 
-        retract(executing_action(_)),
-        Outcome = [Ob1|Ob2], 
-        report_message(system(2), ['Action *', (A1, A2), '* completed with outcome:', Outcome]).
-%% 2. other actions
-execute_action(Action, H, Type, Outcome) :-
-        %% Increment action counter by 1 and store action information
-	update_counter(N), 
-        assert_execution(N,Action,Type,H), 
-        thread_get_message(got_sensing(Action, Outcome)),
-        clean_execution(N).
-
-report_xeq(Type, Act) :-
-        report_message(system(1), ['sending', Type, 'action *', Act, '* for execution.']).
-report_err(Act, H) :-
-        report_message(error, ['action *', Act, '* FAILED to execute at history: ', H]).
-report_suc(Act, S) :-
-        report_message(action, ['action *', Act, '* EXECUTED SUCCESSFULLY with sensing outcome: ', S]).
-
-	% report_message(system(2), 
-	% 	['Action *', (M, Action), '* completed with outcome:', Outcome]).
-
-%% -- type_action(+Action, -Type)
-%%    finds out the type of an action
-type_action(Act, sensing) :- senses(Act); senses(Act, _); senses(Act, _, _, _, _), !.
-type_action(Act, system) :- system_action(Act), !.
-type_action(par(_, _), parallel).
-type_action(_, nonsensing). %% for the rest
-
-refresh_counter :- retractall(action_counter(_)), assertz(action_counter(0)).
-
-%% -- update_counter(-M)
-%%    update the counter and output the current step
-update_counter(M) :-
-        retract(action_counter(N)),
-        M is N+1, assert(action_counter(M)).
-
-%% -- store new actions to execute
-assert_execution(N,Act,Type,H) :-
-	assert(executing_action(N,Action,H,Type)),
-        assertz(executing_action(Act)), 
-        assertz(indigolog_action(Act)).
-
-%% -- 
-clean_execution(N) :-
-        retract(executing_action(N,_,_,_)),
-        retract(executing_action(_)).
-
-%% -- handle_sensing(+Action, +[Action|History], +Value, -NewHistory)
-%%    change the NewHistory to encode the sensing result of Action
-%%    1. old way with senses/2
-handle_sensing(Act, [Act|H], Sr, [e(F, Sr), Act|H]) :- senses(Act,F).
-% %%    2. new way with senses/1, effects are defined by settles and rejects
-% handle_sensing(Act, [Act|H], Sr, [e(Act, Sr), Act|H]) :- senses(Act).
-% %%    3. not used senses/5
-% handle_sensing(Act, [Act|H], Sr, [e(F, Sr), Act|H]) :- senses(Act,Sr,F,_,_). %% only add the sensing result to the history, no need to validate condition
-
-
 %% Mapping
 :- dynamic
         settles/5,
@@ -878,11 +887,8 @@ handle_sensing(Act, [Act|H], Sr, [e(F, Sr), Act|H]) :- senses(Act,F).
 %% -- rejects(+SensingAct, +SensedResult, +Fluent, +Value, +Condition)
 %%    If Condition holds and SensingAct gets SensedResult, then Fluent does not
 %%    get Value
-%%    reject(smell, 0, locWumpus, Y, adj(locRobot, Y)) means if smell gets 0 as result,
-%%    then ALL the adjcent location Y of locRobot can not be location of the Wumpus.
+%%    reject(smell, 0, locWumpus, Y, adj(locRobot, Y)) means
+%%    if smell gets 0 as result, then ALL the adjcent location Y
+%%    of locRobot can not be location of the Wumpus.
 %% -- settles(+SensingAct, +SensedResult, +Fluent, +Value, +Condition)
 %%    settles(senseGold, 1, isGold(L), true, L=locRobot).
-
-        
-read_action(Act) :-
-	thread_get_message(Act).
