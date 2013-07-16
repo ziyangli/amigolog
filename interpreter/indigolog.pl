@@ -1,43 +1,22 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % FILE    : indigolog.pl
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%
-%  In addition to a (Con)Golog program, users provide these predicates:
-%
-%      prim_fluent(fluent),             for each primitive fluent
-%      prim_action(action),             for each primitive action
-%      exog_action(action),             for each exogenous action
-%      senses(action,fluent),           for each sensing action
-%      poss(action,cond)                when cond, action is executable
-%      initially(fluent,value)          fluent has value in S0
-%      causes_val(action,fluent,value,cond)
-%            when cond holds, doing act causes fluent to have value
-%
-%      execute(action,sensing_result)   do the action, return the result
-%            can use ask_execute
-%      exog_occurs(action)              return an exog action
-%            can use ask_exog_occurs (or fail, if none)
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 :- dynamic
-        doing_step/0, %% flag to show a step is being calculated
-        pause_step/0, %% flag to show a step is paused
-        wait_at_action/1, %% wait some seconds after EACH action
+        doing_step/0,     %% flag to show a step is being CALCULATED
 
         indi_exog/1, %% store exog events not managed yet
                 
         excuting_action/1, 
         excuting_action/4, %% assert the current action so that Python can query
-        action_counter/1,  %% just a counter
+        action_counter/1,  %% counter to show the current step
 
         currently/2, 
-        has_valc/3,  %% store cached fluent (F, V, H)
+        has_valc/3, %% store cached fluent (F, V, H)
         
         now/1,       %% store actual history
         rollednow/1, %% part of th actual history that has been rolled
-        temp/2,      %% Temporal predicate used for rolling forward
-
-        protectHistory/1. %% TODO: protect a history to avoid rolling, used in search?
+        temp/2.      %% temporal predicate used for rolling forward
         
 :- multifile
         set_option/1,
@@ -50,7 +29,7 @@
         senses/5, 
         senses/2,
 
-        fails/2, %% exog. action Act fails Action
+        fails/2,   %% exog. action Act fails Action
         rescues/2, %% proc. P resuces Action
         
         initially/2.
@@ -58,72 +37,63 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 :- ensure_loaded(data_util).
-%% :- ensure_loaded(sysexog). %% load the system exog events
 :- ensure_loaded(sys_util).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% TOP LEVEL MAIN CYCLE
 %% -- indigolog(E)
 %%    E is a high-level program
-%%    The history H is a list of actions (prim or exog), initially [] (empty)
-%%    Sensing reports are inserted as actions of the form e(fluent,value)
+%%    the history H is a list of actions (prim or exog), initially [] (empty)
+%%    sensing reports are inserted as actions of the form e(fluent,value)
 
 indigolog(E) :-
         %% 1. clean up indigolog database
         initialize,
         %% 2. run indigo/2 in the indigolog_thread
-        thread_create(indigo(E,[]), ID, [at_exit(plan_done(ID)), alias(indigolog_thread), detached(true)]).
-%% indigolog(E) :- initialize, indigo(E, []).
+        thread_create(indigo(E,[]),ID,[at_exit(program_ends(ID)),alias(indigolog_thread),detached(true)]).
 
-indigo(E, H) :-
-        %% 1. first get rid of the tail of H when necessary and update currently
-        %%    H2 is the header part of H
-        handle_rolling(H, H2), !,
-        %% 2. handle pending exog. events
-        %%    exog events are added to the front of H2
-        handle_exog(H2, H3), !,
-        prepare_for_step,               %% turn off gc
-        %% 3. compute next configuration E4, H4, S
-        mayEvolve(E, H3, E4, H4, S), !, 
-        wrap_up_step,                   %% turn on gc again
+indigo(E,H) :-
+        %% 1. handle pending exog. events
+        handle_exog(H,HwithExog), !,
+        %% 2. update currently/2 and has_valc/3 to speed up the regression
+        handle_rolling(HwithExog,HRolled), !,
+        prepare_for_step, %% turn off gc
+        %% 3. compute next configuration EEvolved, HEvolved, S
+        mayEvolve(E,HRolled,EEvolved,HEvolved,S), !, 
+        wrap_up_step, %% turn on gc again
         (
           %% 4.1 clean up the history or execute the action
-          S=trans  -> indigo2(H3, E4, H4);
+          S=trans  -> indigo2(HRolled,EEvolved,HEvolved);
           %% 4.2 program ends
-          S=final  -> report_message(program, 'Success.');
-          %% 4.3 exog event happens during trans, harly true
-          %%     exog event is included in H3
-          S=exog   -> (report_message(program, 'Restarting step.'), indigo(E, H3)); 
-          S=failed -> report_message(program, 'Program fails.')
+          S=final  -> report_message(program,'Success.');
+          %% 4.3 exog events occur during trans, harly happens
+          S=exog   ->
+          (report_message(program,'Restarting step.'),indigo(E,HRolled));
+          %% 4.4 program fails
+          S=failed -> report_message(program,'Program fails.')
         ).
 
-%% -- indigo2(+H1, +E, +H2)
+%% -- indigo2(+HbT,+EaT,+HaT)
 %%    called from indigo/2 only after a successful TRANS
-%%    H1 is the history BEFORE the transition
-%%    E is the program that remains to execute
-%%    H2 is the history AFTER the transition
-indigo2(H, E, H) :- indigo(E, H). %% The case of TRANS for tests ?(P)
-indigo2(H, E, [wait|H]) :-
-        !,
-        pause_or_roll(H, H1),
-        doWaitForExog(H1, H2),
-        indigo(E, H2).
-indigo2(H,E,[stop_interrupts|H]) :- !, 
-	indigo(E,[stop_interrupts|H]).
-indigo2(H,E,[A|H]) :-
-        indixeq(A,H,H1,P), %% execute domain action
-        (ground(P) -> 
-            indigo([P,E],H1)
-        ;
-            indigo(E, H1)).
+%%    HbT is the history BEFORE TRANS
+%%    EaT is the program that remains to execute
+%%    HaT is the history AFTER TRANS
+%% 1. TRANS does not add action to History, ?(P)/query(Q)/etc
+indigo2(H,E,H)                   :- indigo(E,H).
+%% 2. INTERRUPTION stops
+indigo2(H,E,[stop_interrupts|H]) :- !, indigo(E,[stop_interrupts|H]).
+%% 3. execute domain action, single Act or par(A1, A2)
+indigo2(HisbeforeTrans,EafterTrans,[Act2xeq|HisbeforeTrans]) :-
+        indixeq(Act2xeq,HisbeforeTrans,HafterXeq,Erec),
+        indigo([Erec|EafterTrans],HafterXeq).
 
-%% -- mayEvolve(E1,H1,E2,H2,S)
-%%    perform transition from (E1,H1) to (E2,H2) with result S
-%%    trans = (E1,H1) performs a step to (E2,H2)
-%%    final = (E1,H1) is a terminating configuration
+%% -- mayEvolve(+EbE,+HbE,-EaE,-HaE,S)
+%%    perform transition from (EbE,HbE) to (EaE,HaE) with result S
+%%    trans = (EbE,HbE) performs a step to (EaE,HaE)
+%%    final = (EbE,HbE) is a terminating configuration
 %%    exog  = an exogenous actions occurred
-%%    failed= (E1,H1) is a dead-end configuration
-mayEvolve(E1, H1, E2, H2, S) :-
+%%    failed= (EbE,HbE) is a dead-end configuration
+mayEvolve(E1,H1,E2,H2,S) :-
         catch( ( %% 1. assert flag doing_step
                  assert(doing_step),
                  %% 2. check if exog happens
@@ -142,7 +112,7 @@ mayEvolve(E1, H1, E2, H2, S) :-
                %% exception handling
                (retractall(doing_step), S = exog)).
 
-plan_done(ID) :- write('Plan Done and '), write(ID), write(' exited!').
+program_ends(ID) :- write('Exit '), write(ID), write(' !').
 
 %% -- abortStep
 %%    if doing_step is asserted, throw exog_action
@@ -157,8 +127,8 @@ wrap_up_step :-                  %% after computing a step
         garbage_collect.
 
 initialize :-
-        retractall(currently(_, _)),
-        forall(initially(F, V), assert(currently(F, V))), 
+        retractall(currently(_,_)),
+        forall(initially(F,V),assert(currently(F,V))),
         clean_cache, %% clean has_valc/2
         reset_indigolog_dbs,
         refresh_counter.
@@ -166,7 +136,6 @@ initialize :-
 reset_indigolog_dbs :-
         retractall(doing_step),
         retractall(indi_exog(_)),
-        %% retractall(protectHistory(_)),
         retractall(rollednow(_)),
         retractall(now(_)),
         update_now([]),
@@ -180,12 +149,12 @@ reset_indigolog_dbs :-
 
 %% 1. execution of system actions
 %%    just add it to history
-indixeq(Act,H,H2,_) :-
+indixeq(Act,H,H2,[]) :-
         type_action(Act, system), !, %% Act=e(_,_)
         H2 = [Act|H],
         update_now(H2).
 %% 2. execution of sensing actions
-indixeq(Act,H,H2,_) :- 
+indixeq(Act,H,H2,[]) :- 
         type_action(Act, sensing), !,
         report_xeq(sensing, Act),         
         execute_action(Act, H, sensing, S), !,
@@ -201,7 +170,7 @@ indixeq(Act,H,H2,_) :-
             handle_sensing(Act, [Act|H], S, H2), 
             update_now(H2)).
 %% 3. execution of parallel actions
-indixeq(par(A1, A2),H,H2,_) :-
+indixeq(par(A1, A2),H,H2,[]) :-
         type_action(par(A1, A2), parallel), !,
         report_xeq(parallel, (A1, A2)), 
         execute_action([A1, A2], H, parallel, S), !,
@@ -224,11 +193,12 @@ indixeq(Act,H,H2,P) :-
             handle_exog(H,H2)
         ;
             (S=failed ->
-                report_err(Act, H), 
+                report_err(Act, H), P=[], 
                 H2 = [abort, failed(Act)|H],
                 update_now(H2)
             ;
-                report_done(Act, S), 
+                report_done(Act, S),
+                P=[], 
                 wait_if_neccessary,
                 H2 = [Act|H],
                 update_now(H2))).
@@ -244,7 +214,7 @@ type_action(_, nonsensing). %% for the rest
 %% 1. parallel actions
 execute_action([A1, A2], H, parallel, Outcome) :-
         update_counter(N),
-        assert_execution(N,[A1,A2],H,parallel),
+        assert_execution(N,[A1,A2],parallel,H),
         (thread_get_message(got_sensing(A2, Ob1)),
             thread_get_message(got_sensing(A1, Ob2))
         ;
@@ -261,14 +231,17 @@ execute_action(Act, H, Type, Outcome) :-
         thread_get_message(Message),
         (Message = exog(ExogAct) ->
             (fails(ExogAct, Act) ->
+                %% If the exog. event fails the Act
                 exog_action_occurred([ExogAct]), 
                 Outcome=exog
             ;
+                %% normal exog. event
                 exog_action(ExogAct),
                 exog_action_occurred([ExogAct]),
                 fail)
         ;
-            Message = got_sensing(Act, Outcome)),
+            %% Act executed
+            Message = got_sensing(Act,Outcome)),
         clean_execution(N).
 
 report_xeq(Type, Act) :-
@@ -289,8 +262,8 @@ update_counter(N) :-
 
 %% -- store new actions to execute
 assert_execution(N,Act,Type,H) :-
-	assert(executing_action(N,Act,H,Type)),
-        assertz(executing_action(Act)).
+	assert(executing_action(N,Act,Type,H)),
+        assert(executing_action(Act)).
 
 %% -- 
 clean_execution(N) :-
@@ -312,7 +285,7 @@ handle_sensing(Act, [Act|H], Sr, [e(F, Sr), Act|H]) :- senses(Act,F).
 %% until they are ready to be incorporated into the history
 
 %% check if exists any pending exogenous event
-exists_pending_exog_event :- indi_exog(_).
+exists_pending_exog_event :- indi_exog(_), !.
 
 %% -- exog_action_occurred(+L)
 %%    called to report the occurrence of a list L of
@@ -325,7 +298,7 @@ exog_action_occurred([ExoAction|LExoAction]) :-
         report_message(exogaction, ['Exog. Action *',ExoAction,'* occurred']),
 	exog_action_occurred(LExoAction).
 
-%% -- handle_exog(+History, -History2)
+%% -- handle_exog(+History1, -History2)
 %%    History2 is History1 with all pending exog actions placed at the front
 handle_exog(H1, H2) :- 
         %% 1 - Collect SYSTEM exogenous actions (e.g., debug)
@@ -337,16 +310,8 @@ handle_exog(H1, H2) :-
         append(LTotal, H1, H2), 
 	update_now(H2),
 	%% 4 - Remove all indi_exog/1 clauses
-	retractall(indi_exog(_)).
-handle_exog(H1, H1). %% No exogenous actions, keep same history
-
-%% -- doWaitForExog(+History1, -History2)
-%%    wait continously until an exogenous action occurrs
-doWaitForExog(H1,H2):- 	
-        report_message(system(2), 'Waiting for exogenous action to happen'), 
-        repeat, 
-        handle_exog(H1,H2),
-        (H2=H1 -> fail ; true).
+	retractall(indi_exog(_)), !.
+handle_exog(H1, H1) :- !. %% No exogenous actions, keep same history
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% History

@@ -7,6 +7,10 @@
 
 :- dynamic rm_exec_action_from_plan/1.
 
+:- dynamic executing_action_duplicated/1.
+:- dynamic action/1.
+:- dynamic action_input/1.
+
 
 :- multifile 
 		indigolog_action/1,
@@ -26,38 +30,80 @@
 % !!!!!!!!!!!!!!!!!!!!!!!!!!! COMMENT UNTIL THIS LINE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 % !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
+get_action(Action,Action_input) :-
+    % First duplicate action plan so that I can assert / delete something out of the same list to check concurrent actions.    
+	(retract(action(_)),
+	retract(action_input(_)),
+	duplicate_action(X),
+	(get_action_list(Action2,Action_input2);
+	action(Action),
+	action_input(Action_input)));
+	(duplicate_action(X),
+	(get_action_list(Action2,Action_input2);
+	action(Action),
+	action_input(Action_input))).
+
+
+duplicate_action(X) :-
+	executing_action(Action_with_inputs),
+	((retract(executing_action_duplicated(_)),
+	assert(executing_action_duplicated(Action_with_inputs)));
+	assert(executing_action_duplicated(Action_with_inputs))).
+
+get_action_list(Action,Action_input) :-
+	check_concurrent_action(Action_with_inputs),
+	get_action_input(Action_with_inputs,New_Action,New_Action_input),
+
+	((action(Old_Action),
+	append(Old_Action, [New_Action], Appended_Action),
+	retract(action(_)),
+	assert(action(Appended_Action)));
+	(not(action(_)),
+	assert(action([New_Action])))),
+
+	((action_input(Old_Action_input),
+	append(Old_Action_input, [New_Action_input], Appended_Action_Input),
+	retract(action_input(_)),
+	assert(action_input(Appended_Action_Input)));	
+	(not(action_input(_)),
+	assert(action_input([New_Action_input])))),
+
+	get_action_list(Action2,Action_input2).	
+
+
+check_concurrent_action(Action_with_inputs) :-
+	executing_action_duplicated([Action_with_inputs|Tail]),
+	retract(executing_action_duplicated(_)),
+	assert(executing_action_duplicated(Tail)).
+
 
 % get_action_input just looks how many inputs are given in the action and will put them in a list Action_input. 
 % This way easier to handle within Python
 get_action_input(Action_with_inputs, Action, Action_input) :-
         Action_with_inputs =.. [Action|Action_input].
-	% Action_with_inputs =.. [Action,I1],
-	% %I1 \= [H|T], % should NOT be a list
-	% Action_input = [I1];
-	% Action_with_inputs =.. [Action,I1,I2],
-	% Action_input = [I1,I2];
-	% Action_with_inputs =.. [Action,I1,I2,I3],
-	% Action_input = [I1,I2,I3];
-	% Action_with_inputs =.. [Action,I1,I2,I3,I4],
-	% Action_input = [I1,I2,I3,I4];
-	% Action_with_inputs =.. [Action,I1,I2,I3,I4,I5],
-	% Action_input = [I1,I2,I3,I4,I5];
-	% Action_with_inputs =.. [Action,I1,I2,I3,I4,I5,I6],
-	% Action_input = [I1,I2,I3,I4,I5,I6];
-	% Action_with_inputs =.. [Action,I1,I2,I3,I4,I5,I6,I7],
-	% Action_input = [I1,I2,I3,I4,I5,I6,I7];
-	% Action_with_inputs =.. [Action,I1,I2,I3,I4,I5,I6,I7,I8],
-	% Action_input = [I1,I2,I3,I4,I6,I6,I7,I8].
 
-get_action(Action,Action_input) :-
-        %% Be aware that if more than 8 inputs are used, change this in get_action_input predicate
-	executing_action(Action_with_inputs),
-	get_action_input(Action_with_inputs,Action,Action_input).
+get_length_list(List,Length) :-
+	length(List,Length).
 
 %% Outcome 'failed' repeats action for now, otherwise success is assumed.
-assert_done(Outcome) :-
-	executing_action(Action_with_inputs),
+assert_done(Outcome,Action,Action_input) :-
+	Action_with_inputs =.. [Action|Action_input],
 	thread_send_message(indigolog_thread, got_sensing(Action_with_inputs, Outcome)). %% wait until get sensing Result
+
+
+
+
+
+
+/*
+executing_action([
+	navigate_generic(lookat_point_3d, 1.19, -1.0, 0.8), % = X-POI,Y-POI,Z-POI
+	spindle(send_goal,30,0.8),							% 30 = waittime, 0.8 = Z-POI
+	say('I found a drink'),
+	head(reset),
+	spindle(reset,20)
+	]).
+*/
 
 
 %% get_action(Action,Action_input) :-                                                                                                          

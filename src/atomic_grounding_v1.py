@@ -38,8 +38,6 @@ def init_retract_facts(self):
     # robot.reasoner.query(Compound("retractall", Compound("action", "X")))
 
     ##Load database
-    rospy.loginfo("[AG] UNCOMMENT LOADING DATABASE OF INDIGOLOG IF INDIGOLOG IS USED")
-
     self.reasoner.query(Compound("load_database","tue_owls_indigolog_exec",'knowledge/kb_ag.pl'))
     self.reasoner.query(Compound("load_database", "tue_owls_indigolog_exec", 'knowledge/locations_ag.pl'))
     rospy.loginfo("[AG] Database loaded")
@@ -298,13 +296,13 @@ def execute(self, action, action_input=None):
 
             time = float(action_input[1])
             rospy.loginfo("[AG] Start object recognition")
-            result = self.perception.toggle_recognition(objects=True)
+            self.perception.toggle(["template_matching"])
 
             # Let the object recognition run for a certain period
             rospy.sleep(time)
 
             rospy.loginfo("[AG] Stop object recognition")
-            result = self.perception.toggle_recognition(objects=False)
+            self.perception.toggle([])
 
         elif perception_action == "face":
             # Action: perception_recognition(face, time)
@@ -312,13 +310,13 @@ def execute(self, action, action_input=None):
             time = float(action_input[1])
 
             rospy.loginfo("[AG] Start face recognition")
-            result = self.perception.toggle_recognition(faces=True)
+            self.perception.toggle(['face_segmentation'])
 
             # Let the object recognition run for a certain period
             rospy.sleep(time)
 
             rospy.loginfo("[AG] Stop face recognition")
-            result = self.perception.toggle_recognition(faces=False)
+            self.perception.toggle([])
 
         elif perception_action == "object_and_face":
             # Action: perception_recognition(object_and_face, time)
@@ -326,13 +324,13 @@ def execute(self, action, action_input=None):
             time = float(action_input[1])
 
             rospy.loginfo("[AG] Start object and face recognition")
-            result = self.perception.toggle_recognition(faces=True, objects=True)
+            self.perception.toggle(["template_matching","face_segmentation"])
 
             # Let the object recognition run for a certain period
             rospy.sleep(time)
 
             rospy.loginfo("[AG] Stop object and face recognition")
-            result = self.perception.toggle_recognition(faces=False, objects=False)
+            self.perception.toggle([])
 
 
         elif perception_action == "laser_2d":
@@ -410,11 +408,8 @@ if __name__ == "__main__":
 
             execute(robot, action, action_input)
 
-            rospy.loginfo("[AG] Executed action is removed from plan, delete this part when IndiGolog is used")
-            indigolog_plan_query = robot.reasoner.query(Compound("rm_exec_action_from_plan", "X"))
-
             rospy.loginfo("[AG] Asserting success")
-            robot.reasoner.query(Compound("assert_done", "success"))
+            robot.reasoner.query(Compound("assert_done", "success", action, action_input))
 
             rospy.loginfo("[AG] Ready for next action")
 

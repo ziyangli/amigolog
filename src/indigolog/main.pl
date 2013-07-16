@@ -72,10 +72,11 @@ proc(on_off_combine_test,
 proc(trans_final_test, [star(add_count), star(go_table(1)), star(go_table(2))]).
 
 trace_setting :-
-%       spy(mayEvolve),
-%       spy(final),
+%%       spy(mayEvolve),
+%%       spy(final),
         trace(fails),
-        trace(thread_get_message), 
+        trace(thread_get_message),
+        spy(indixeq), 
         trace(mayEvolve),
         trace(indigo2), 
         trace(holds, -all), 
