@@ -2,34 +2,43 @@
 % FILE    : indigolog.pl
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+
+:- style_check(-discontiguous). %% disable warning different location of definition
+:- set_prolog_flag(backquoted_string, true). %% set ` to be the string construct
+:- set_prolog_flag(optimise, true).
+:- set_debug_level(warn_on).
+
+roll_parameters(3, 5, 2).
+
 :- dynamic
         doing_step/0, %% flag to show a step is being CALCULATED
 
         indi_exog/1, %% store exog events not managed yet
-                
+
+        action_counter/1,  %% counter to show the current step
         excuting_action/1, 
         excuting_action/4, %% assert the current action so that Python can query
-        action_counter/1,  %% counter to show the current step
+        
+        preempt/1, %% asserted when an action should be preempted
 
-        preempt/1,
-
-        currently/2, 
-        has_valc/3, %% store cached fluent (F, V, H)
+        currently/2, %% dynamic version of initially/2
+        has_valc/3,  %% store cached fluent (Fluent,Value,History)
         
         now/1,       %% store actual history
         rollednow/1, %% part of th actual history that has been rolled
         temp/2.      %% temporal predicate used for rolling forward
         
 :- multifile
-        exog_action/1,
-        
-        senses/1,
-        senses/5, 
-        senses/2,
-
-        rescues/2, %% proc. P resuces Action
-        
-        initially/2.
+        prim_action/1,                %% primitive actions
+        exog_action/1,                %% exogenous actions
+        senses/1, senses/2, senses/5, %% sensing actions
+        causes_val/4,                 %% effects of actions
+        poss/2,                       %% precondition of actions
+        on_condition/2,               %% on conditions of actions
+        prim_fluent/1,                %% primitive fluents
+        proc/2,                       %% procedure
+        rescues/2,                    %% proc. P resuces Action
+        initially/2.                  %% initial value of fluent
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

@@ -97,3 +97,23 @@ error(M) :-
 
 warn(M) :- report_message(warning, M).
 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+util_debug :- thread_signal(indigolog_thread, (attach_console, trace)).
+util_next :- thread_send_message(indigolog_thread, next_step).
+util_exog :- thread_send_message(indigolog_thread, request(table(4), 3)).
+
+util_feedback(Result) :-
+        executing_action(A),
+        is_list(A),
+        A = [A1|A2], 
+        thread_send_message(indigolog_thread, got_sensing(A1, Result)), 
+        thread_send_message(indigolog_thread, got_sensing(A2, Result)), !.
+
+util_feedback(Result) :-
+        executing_action(Act),
+        thread_send_message(indigolog_thread, got_sensing(Act, Result)), !.
+
+util_exog(ExogAct) :-
+        exog_action_occurred(ExogAct).
