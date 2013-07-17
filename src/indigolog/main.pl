@@ -7,6 +7,7 @@
         causes_val/4,
         poss/2,
         proc/2,
+        on_condition/2, 
         prim_fluent/1.
 
 %% Consult the top-level interpreter
@@ -96,7 +97,6 @@ prim_action(rec_add).
 poss(rec_add, true).
 
 exog_action(fail_add).
-fails(fail_add, add_count).
 rescues(add_count, fail_add_rec).
 proc(fail_add_rec, [rec_add, rec_add]).
 
