@@ -1,12 +1,9 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % FILE    : indigolog.pl
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-
 :- style_check(-discontiguous). %% disable warning different location of definition
 :- set_prolog_flag(backquoted_string, true). %% set ` to be the string construct
 :- set_prolog_flag(optimise, true).
-:- set_debug_level(warn_on).
 
 roll_parameters(3, 5, 2).
 
@@ -44,6 +41,8 @@ roll_parameters(3, 5, 2).
 
 :- ensure_loaded(data_util).
 :- ensure_loaded(sys_util).
+
+:- set_debug_level(warn_on).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% TOP LEVEL MAIN CYCLE

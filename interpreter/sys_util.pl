@@ -32,6 +32,7 @@ catch_succ(Call, Message) :-
 	debug_level/1,
 	warn_off/0.
 
+%% :- module_transparent set_debug_level/1.
 %% -- set_debug_level(+N)
 %%    set the debug level to N, only messages system(M) with M>N are shown
 
