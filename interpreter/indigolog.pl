@@ -49,7 +49,7 @@ roll_parameters(3, 5, 2).
 %% -- indigolog(E)
 %%    E is a high-level program
 %%    the history H is a list of actions (prim or exog), initially [] (empty)
-%%    sensing reports are inserted as actions of the form e(fluent,value)
+%%    sensing reports are inserted as actions of the form e(Fluent,Value)
 
 indigolog(E) :-
         %% 1. clean up indigolog database

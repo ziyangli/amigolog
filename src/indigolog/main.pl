@@ -31,3 +31,4 @@ trace_setting :-
         trace(has_val/3, -all),
         trace(initially/2, -all).
 %% :- trace_setting.
+

@@ -1,12 +1,9 @@
-%% Interface to the outside world via read and write
-%% execute(A,Sr) :- ask_execute(A,Sr).
-%% exog_occurs(A) :- ask_exog_occurs(A).
-% exog_occurs(_) :- fail.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% General facts
 
 side(Side) :- Side=left; Side=right.
 gripper_state(State) :- State=open; State=close.
 binary(V) :- V=0; V=1.
-
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% HMI
@@ -19,9 +16,10 @@ poss(say(_), true).
 prim_action(ask_action(_)).
 poss(ask_action(_), true).
 
-%% -- set_rgb_lights(+R, +G, +B)
-prim_action(set_rgb_lights(R, G, B)) :- domain(R, binary), domain(G, binary), domain(B, binary).
-poss(set_rgb_lights(_, _, _), true).
+%% -- set_rgb_lights(+R,+G,+B)
+prim_action(set_rgb_lights(R,G,B)) :-
+        domain(R,binary), domain(G,binary), domain(B,binary).
+poss(set_rgb_lights(_,_,_),true).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% GRIPPERS
@@ -31,7 +29,8 @@ poss(set_rgb_lights(_, _, _), true).
 % initally(gripper_state(_), open).
 
 %% -- gripper(+Side, +State)
-prim_action(gripper(Side, State)) :- domain(Side, side), domain(State, gripper_state).
+prim_action(gripper(Side,State)) :-
+        domain(Side,side), domain(State,gripper_state).
 poss(gripper(_, _), true).
 %% causes_val(gripper(Side, State), gripper_state(Side), State, true).
 
@@ -40,27 +39,27 @@ poss(gripper(_, _), true).
 
 %% -- tuck_arm(Side)
 %%    send gripper to a safe pre-grasp pose close to body
-prim_action(tuck_arm(Side)) :- domain(Side, side).
-poss(tuck_arm(_), true).
+prim_action(tuck_arm(Side)) :- domain(Side,side).
+poss(tuck_arm(_),true).
 
 %% -- arm(prepare_grasp, Side)
 %%    same as tuck_arm
-prim_action(arm(prepare_grasp, Side)) :- domain(Side, side).
+prim_action(arm(prepare_grasp,Side)) :- domain(Side,side).
 poss(arm(prepare_grasp, _), true).
 
 %% -- arm(lift, Side)
 %%    lift arm 10cms
-prim_action(arm(lift, Side)) :- domain(Side, side).
+prim_action(arm(lift,Side)) :- domain(Side,side).
 poss(arm(lift, _), true).
 
 %% -- arm(retract, Side)
 %%    retract arm 10cms 
-prim_action(arm(retract, Side)) :- domain(Side, side).
+prim_action(arm(retract,Side)) :- domain(Side,side).
 poss(arm(retract, _), true).
 
 %% -- arm(carrying, Side)
 %%    move arm into carrying pose
-prim_action(arm(carrying, Side)) :- domain(Side, side).
+prim_action(arm(carrying,Side)) :- domain(Side,side).
 poss(arm(carrying, _), true).
 
 %% -- arm(to_pre_grasp_point, Side, X, Y, Z)
@@ -125,7 +124,8 @@ poss(navigate_generic(lookat_point_3d, _, _, _), true).
 
 %% -- navigate_generic(prepare_grasp_orientation, Side, X, Y, Z)
 %%    navigate to a pre-grasp-pose determined for grasping object at point (X, Y, Z)
-prim_action(navigate_generic(prepare_grasp_orientation, Side, _, _, _)) :- domain(Side, side).
+prim_action(navigate_generic(prepare_grasp_orientation, Side, _, _, _)) :-
+        domain(Side, side).
 poss(navigate_generic(prepare_grasp_orientation, _, _, _, _), true).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -159,7 +159,6 @@ obj_loc_Q(X, Y, Z) :-
 
 poi_Q(Target, X, Y, Z) :-
         point_of_interest(robotics_testlab_A, _, Target, point_3d(X, Y, Z)).
-
         
 %% -- navigate_Q(+Target, -X, -Y, -Phi)
 %%    give a Target, return loc to go
