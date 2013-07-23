@@ -398,18 +398,6 @@ before(H1, H2) :- append(_, H1, H2).
 %%    History is a past situation w.r.t. the actual situation
 pasthist(H) :- now(H2), before(H, H2).
 
-show_currently :-
-        currently(F, V),
-        report_message(system(6), ['Fluent', F, 'had value', V]),
-        fail.
-show_currently.
-
-show_cache :-
-        has_valc(F, V, H),
-        report_message(system(6), ['Cached fluent', F, 'had value', V, 'at', H]),
-        fail.
-show_cache.
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Projector
 
