@@ -143,6 +143,16 @@ poss(perception_recognition(_, _), true).
 prim_action(perception_recognition(laser_2d, _, _, _, _)).
 poss(perception_recognition(laser_2d, _, _, _, _), true).
 
+prim_fluent(point_x_f).
+prim_fluent(point_y_f).
+prim_fluent(point_z_f).
+
+prim_fluent(pose_x_f).
+prim_fluent(pose_y_f).
+prim_fluent(pose_z_f).
+
+prim_fluent(explored_loc_f(_,_,_)). %% pose
+
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -153,13 +163,16 @@ poss(perception_recognition(laser_2d, _, _, _, _), true).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% QUERY
-obj_loc_Q(X, Y, Z) :-
-	property_expected(ObjectID, position, in_front_of(amigo)),
-	property_expected(ObjectID, position, [X,Y,Z]).
+% obj_loc_Q(X, Y, Z) :-
+% 	property_expected(ObjectID, position, in_front_of(amigo)),
+% 	property_expected(ObjectID, position, [X,Y,Z]).
 
-poi_Q(Target, X, Y, Z) :-
-        point_of_interest(robotics_testlab_A, _, Target, point_3d(X, Y, Z)).
-        
+obj_loc_Q(4,5,6).
+% poi_Q(Target, X, Y, Z) :-
+%         point_of_interest(robotics_testlab_A, _, Target, point_3d(X, Y, Z)).
+
+poi_Q(Traget,1,2,3).
+
 %% -- navigate_Q(+Target, -X, -Y, -Phi)
 %%    give a Target, return loc to go
 navigate_Q(Target, X, Y, Phi) :- ! .
