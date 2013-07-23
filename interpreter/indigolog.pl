@@ -85,11 +85,11 @@ indigo(E,H) :-
 indigo2(H,E,H)                   :- indigo(E,H).
 %% 2. INTERRUPTION stops
 indigo2(H,E,[stop_interrupts|H]) :- !, indigo(E,[stop_interrupts|H]).
-%% 3. execute domain action, A can be single Act or par(A1, A2)
+%% 3. execute domain action, A can be a primitive action or par(A1, A2)
 indigo2(H,E,[A|H])               :- 
         indixeq(A,H,H2),
-        update_now(H2),
-        (preempt(A) ->
+        update_now(H2), %% the history after indixeq, if A fails, A is not added
+        (preempt(A) -> %% execution fails and recovery is defined
             retract(preempt(A)), rescues(A,Erec), indigo([Erec|E],H2)
         ;
             indigo(E,H2)).
@@ -164,19 +164,19 @@ indixeq(Act,H,H2) :-
 indixeq(par(A1,A2),H,H2) :-
         execute_action([A1,A2],H,parallel,S),
         (S=failed ->
-            now(H1), report_err((A1,A2),H1), H2 = [abort,failed(A2,A1)|H1]
+           now(H1), report_err((A1,A2),H1), H2 = [abort,failed(A2,A1)|H1]
         ;
-            now(H1), report_done((A1,A2),S), H2=[A2,A1|H1]).
+           now(H1), report_done((A1,A2),S), H2=[A2,A1|H1]).
 %% 3. execution of domain actions
 indixeq(Act,H,H2) :-
         execute_action(Act,H,domain,S),
         (S=exog ->
-            assert(preempt(Act)), now(H2)
+            assert(preempt(Act)), now(H2) %% H2 maynot be the same as H because other exogs will change the History
         ;
             (S=failed ->
-                now(H1),report_err(Act,H1), H2 = [abort,failed(Act)|H1]
+                now(H1), report_err(Act,H), H2 = [abort,failed(Act)|H1]
             ;
-                now(H1), report_done(Act,S), H2 = [Act|H1])).
+                now(H1), report_done(Act,S), H2 = [Act|H])).
 
 %% -- fails(+Act,+H)
 %%    on_condition of Act does not hold in H
