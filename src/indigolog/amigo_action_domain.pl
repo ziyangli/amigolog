@@ -112,21 +112,24 @@ poss(head(send_goal, _, _, _), true).
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% NAVIGATION
 
-%% -- navigate_generic(goal_pose_2d, X, Y, Phi)
+%% -- navigate_generic(goal_pose_2d,X,Y,Phi)
 %%    navigate to a (X, Y, Phi) position
-prim_action(navigate_generic(goal_pose_2d, _, _, _)).
-poss(navigate_generic(goal_pose_2d, _, _, _), true).
+prim_action(navigate_generic(goal_pose_2d,_,_,_)).
+poss(navigate_generic(goal_pose_2d,_,_,_),true).
+causes_val(navigate_generic(goal_pose_2d,X,Y,Phi),explored_loc_f(X,Y,Phi),true,true).
 
-%% -- navigate_generic(lookat_point_3d, X, Y, Z)
-%%    navigate to a pose determined for looking at point (X, Y, Z)
-prim_action(navigate_generic(lookat_point_3d, _, _, _)).
-poss(navigate_generic(lookat_point_3d, _, _, _), true).
+%% -- navigate_generic(lookat_point_3d,X,Y,Z)
+%%    navigate to a pose determined for looking at point (X,Y,Z)
+prim_action(navigate_generic(lookat_point_3d,_,_,_)).
+poss(navigate_generic(lookat_point_3d, _, _, _),true).
+causes_val(navigate_generic(lookat_point_3d,X,Y,_),explored_loc_f(X,Y,_),true,true).
 
 %% -- navigate_generic(prepare_grasp_orientation, Side, X, Y, Z)
 %%    navigate to a pre-grasp-pose determined for grasping object at point (X, Y, Z)
-prim_action(navigate_generic(prepare_grasp_orientation, Side, _, _, _)) :-
-        domain(Side, side).
-poss(navigate_generic(prepare_grasp_orientation, _, _, _, _), true).
+prim_action(navigate_generic(prepare_grasp_orientation,Side,_,_,_)) :-
+        domain(Side,side).
+poss(navigate_generic(prepare_grasp_orientation,_,_,_,_),true).
+causes_val(navigate_generic(prepare_grasp_orientation,_,X,Y,_),explored_loc_f(X,Y,_),true,true).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% PERCEPTION
@@ -152,8 +155,7 @@ prim_fluent(pose_y_f).
 prim_fluent(pose_z_f).
 
 prim_fluent(explored_loc_f(_,_,_)). %% pose
-
-
+initially(explored_loc_f(_,_,_),false).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
