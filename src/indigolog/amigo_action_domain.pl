@@ -171,7 +171,8 @@ navigate_Q(Target, X, Y, Phi) :- ! .
 % spindle(send_goal_laser, 5, Z), head(send_goal, X, Y, Z), perception_recognition(laser_2d, 2, X, Y, Z),
 %% head(send_goal, 1, 2, 0.9),
 proc(demo_seq_test,  [query(poi_Q(desk_1, IX, IY, IZ), _), navigate_generic(lookat_point_3d, IX, IY, IZ), spindle(send_goal, 5, IZ), head(send_goal, IX, IY, IZ), perception_recognition(object, 2.5), query(obj_loc_Q(X, Y, Z), _), arm(prepare_grasp, left), spindle(send_goal, 5, Z), navigate_generic(prepare_grasp_orientation, left,X,Y,Z), gripper(left, open), head(reset), spindle(high, 5), arm(to_pre_grasp_point, left, X, Y, Z), arm(grasp, left, X, Y, Z), gripper(left, close), arm(lift, left), arm(retract, left), arm(carrying, left)]).  
-% %%% Migration of Find object and Grasp object state machine
+
+%% %%% Migration of Find object and Grasp object state machine
 
 % :-dynamic object_loc/4.
 % :-dynamic object_roi/4.
