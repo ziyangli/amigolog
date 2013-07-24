@@ -152,6 +152,13 @@ reset_indigolog_dbs :-
 %%    HbE is the history before execution
 %%    HaE is the history after execution
 
+indixeq(query(Q,O),H,H2) :-
+        (call(Q) -> O = true;
+            O = failed),
+        (O=failed ->
+            report_err(query(Q,O),H), H2 = [query(Q,O)|H]
+        ;
+            report_done(query(Q,O),good), H2 = [query(Q,O)|H]).        
 %% 1. execution of sensing actions
 indixeq(Act,H,H2) :-
         sensing_action_p(Act), !, 
@@ -608,9 +615,9 @@ final(followpath(E,_),H) :- final(E,H).  %% off path; check again????
 trans(followpath(E,[E,H,E1,H1|L]),H,followpath(E1,[E1,H1|L]),H1) :- !.
 trans(followpath(E,_),H,E1,H1) :- trans(search(E),H,E1,H1). %% redo search
 
-%% -- query(+P, -S)
+%% -- query(+P,-O)
 %%    call P and return true or false
-trans(query(P, S), H, [], H) :- call(P) -> S=true; S=failed.
+trans(query(P,O),H,[],[query(P,O)|H]). %% :- call(P) -> S=true; S=failed.
 
 %% Wait and commit are two "meta" actions.
 %% wait action tells the interpreter to wait until an exogenous action arrives
