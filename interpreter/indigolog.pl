@@ -152,13 +152,21 @@ reset_indigolog_dbs :-
 %%    HbE is the history before execution
 %%    HaE is the history after execution
 
-indixeq(query(Q,O),H,H2) :-
-        (call(Q) -> O = true;
-            O = failed),
-        (O=failed ->
-            report_err(query(Q,O),H), H2 = [query(Q,O)|H]
+fvmap2e([],[]) :- !.
+fvmap2e(FVmap,[e(F,V)|H]) :-
+        FVmap = [F,V|FVmap2], !,
+        fvmap2e(FVmap2,H).
+
+indixeq(query(Q),H,H2) :-
+        subf(Q,Qeval,H),
+        query_map(Qeval,Qbody,FVmap),
+        (call(Qbody) ->
+            report_done(query(Qeval),success),
+            fvmap2e(FVmap,H1),
+            append(H1,[query(Qeval)|H],H2)
         ;
-            report_done(query(Q,O),good), H2 = [query(Q,O)|H]).        
+            report_err(query(Qeval),H), H2 = [query(Qeval)|H]).
+            
 %% 1. execution of sensing actions
 indixeq(Act,H,H2) :-
         sensing_action_p(Act), !, 
@@ -483,14 +491,14 @@ holds(P,H) :-
 %%    1. if Act is a standard action with a successor state axiom causes_val
 sets_val(Act,F,V,H) :-
         causes_val(Act,F,V,C), holds(C,H).
+%%    5. Fluent can explicitly set by e(F,V).
+%%       -- assume(+F,+V,+H,-[e(F,V)|H]). 
+sets_val(e(F,V),F,V,_) :- prim_fluent(F).
 %%    3. if Act is a sensing action without settles axiom
 sets_val(e(Act,V),F,V,_) :- senses(Act,F), !.
 %%    4. Act sets F indirectly
 sets_val(e(Act,V),F,V2,H) :-
         senses(Act,V,F,V2,P), holds(P,H).
-%%    5. Fluent can explicitly set by e(F,V).
-%%       -- assume(+F,+V,+H,-[e(F,V)|H]). 
-sets_val(e(F,V),F,V,_) :- prim_fluent(F).
 
 :- multifile
         cache/1.
@@ -617,7 +625,7 @@ trans(followpath(E,_),H,E1,H1) :- trans(search(E),H,E1,H1). %% redo search
 
 %% -- query(+P,-O)
 %%    call P and return true or false
-trans(query(P,O),H,[],[query(P,O)|H]). %% :- call(P) -> S=true; S=failed.
+trans(query(P),H,[],[query(P)|H]). %% :- call(P) -> S=true; S=failed.
 
 %% Wait and commit are two "meta" actions.
 %% wait action tells the interpreter to wait until an exogenous action arrives

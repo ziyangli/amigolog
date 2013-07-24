@@ -147,6 +147,12 @@ prim_action(perception_recognition(laser_2d, _, _, _, _)).
 poss(perception_recognition(laser_2d, _, _, _, _), true).
 
 
+prim_fluent(obj_id_f).
+initially(obj_id_f,desk-1).
+
+prim_fluent(loc_id_f).
+prim_fluent(ppl_id_f).
+
 prim_fluent(point_x_f).
 prim_fluent(point_y_f).
 prim_fluent(point_z_f).
@@ -162,19 +168,19 @@ initially(explored_loc_f(_,_,_),false).
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% MIGRATION OF STATEMACHINE
 
-prim_action(query(_,_)).
-poss(query(_,_),true).
+prim_action(query(_)).
+poss(query(_),true).
 
+query_map(obj_loc(Obj_ID),obj_loc_Q(Obj_ID,X,Y,Z),[point_x_f,X,point_y_f,Y,point_z_f,Z]).
 
+% causes_val(query(obj_loc_Q(X,_,_),S),point_x_f,X,S=true).
+% causes_val(query(obj_loc_Q(_,Y,_),S),point_y_f,Y,S=true).
+% causes_val(query(obj_loc_Q(_,_,Z),S),point_z_f,Z,S=true).
+% causes_val(query(obj_loc_Q(_,_,_),S),point_x_f,unknown,S=failed).
+% causes_val(query(obj_loc_Q(_,_,_),S),point_y_f,unknown,S=failed).
+% causes_val(query(obj_loc_Q(_,_,_),S),point_z_f,unknown,S=failed).
 
-causes_val(query(obj_loc_Q(X,_,_),S),point_x_f,X,S=true).
-causes_val(query(obj_loc_Q(_,Y,_),S),point_y_f,Y,S=true).
-causes_val(query(obj_loc_Q(_,_,Z),S),point_z_f,Z,S=true).
-causes_val(query(obj_loc_Q(_,_,_),S),point_x_f,unknown,S=failed).
-causes_val(query(obj_loc_Q(_,_,_),S),point_y_f,unknown,S=failed).
-causes_val(query(obj_loc_Q(_,_,_),S),point_z_f,unknown,S=failed).
-
-proc(query_test, [query(obj_loc_Q(_,_,_),_),navigate_generic(lookat_point_3d,point_x_f,point_y_f,point_z_f)]).
+proc(query_test, [query(obj_loc(obj_id_f)),navigate_generic(lookat_point_3d,point_x_f,point_y_f,point_z_f)]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% QUERY
@@ -182,7 +188,7 @@ proc(query_test, [query(obj_loc_Q(_,_,_),_),navigate_generic(lookat_point_3d,poi
 % 	property_expected(ObjectID, position, in_front_of(amigo)),
 % 	property_expected(ObjectID, position, [X,Y,Z]).
 
-obj_loc_Q(1,2,3).
+obj_loc_Q(desk-1,1,2,3).
 % poi_Q(Target, X, Y, Z) :-
 %         point_of_interest(robotics_testlab_A, _, Target, point_3d(X, Y, Z)).
 
