@@ -166,15 +166,7 @@ indixeq(query(Q),H,H2) :-
             append(H1,[query(Qeval)|H],H2)
         ;
             report_err(query(Qeval),H), H2 = [query(Qeval)|H]).
-            
-%% 1. execution of sensing actions
-indixeq(Act,H,H2) :-
-        sensing_action_p(Act), !, 
-        execute_action(Act,H,sensing,S),
-        (S=failed ->
-            report_err(Act,H), H2 = [abort,failed(Act)|H]
-        ;
-            report_done(Act), handle_sensing(Act,[Act|H],S,H2)).
+
 %% 2. execution of parallel actions
 indixeq(par(A1,A2),H,H2) :-
         execute_action([A1,A2],H,parallel,S),
@@ -368,9 +360,8 @@ roll_action(A) :-
         report_message(system(6), ['Action', A, 'changed', F, 'to', V]),
         assert(temp(F, V)),
         fail.
-roll_action(e(A, V)) :-
-        senses(A, F),
-        report_message(system(6), ['Sensing action', A, 'changed', F, 'to', V]),
+roll_action(e(F, V)) :-
+        report_message(system(6), ['Fluent' F, 'was set to be', V, 'by a query.']),
         retractall(currently(F, _)), %% in fact, sensed fluents usually do not have initial value
         assert(currently(F, V)),
         fail.   
