@@ -5,7 +5,7 @@
 :- set_prolog_flag(backquoted_string, true). %% set ` to be the string construct
 :- set_prolog_flag(optimise, true).
 
-roll_parameters(3, 5, 2).
+roll_parameters(40,50,10).
 
 :- dynamic
         doing_step/0, %% flag to show a step is being CALCULATED
@@ -13,8 +13,8 @@ roll_parameters(3, 5, 2).
         indi_exog/1, %% store exog events not managed yet
 
         action_counter/1,  %% counter to show the current step
-        excuting_action/1, 
-        excuting_action/4, %% assert the current action so that Python can query
+        executing_action/1, 
+        executing_action/4, %% assert the current action so that Python can query
         
         preempt/1, %% asserted when an action should be preempted
 
@@ -31,7 +31,7 @@ roll_parameters(3, 5, 2).
         senses/1, senses/2, senses/5, %% sensing actions
         causes_val/4,                 %% effects of actions
         poss/2,                       %% precondition of actions
-        on_condition/2,               %% on conditions of actions
+        guard_condition/2,               %% on conditions of actions
         prim_fluent/1,                %% primitive fluents
         proc/2,                       %% procedure
         rescues/2,                    %% proc. P resuces Action
@@ -137,6 +137,7 @@ initialize :-
 
 reset_indigolog_dbs :-
         retractall(doing_step),
+        retractall(executing_action(_)),
         retractall(indi_exog(_)),
         retractall(preempt(_)), 
         retractall(rollednow(_)),
@@ -169,11 +170,13 @@ indixeq(query(Q),H,H2) :-
 
 %% 2. execution of parallel actions
 indixeq(par(A1,A2),H,H2) :-
-        execute_action([A1,A2],H,parallel,S),
+        subf(A1,A1val,H),
+        subf(A2,A2val,H),
+        execute_action([A1val,A2val],H,parallel,S),
         (S=failed ->
-           now(H1), report_err((A1,A2),H1), H2 = [abort,failed(A2,A1)|H1]
+           now(H1), report_err((A1val,A2val),H1), H2 = [abort,failed(A2val,A1val)|H1]
         ;
-           now(H1), report_done((A1,A2),S), H2=[A2,A1|H1]).
+           now(H1), report_done((A1val,A2val),S), H2=[A2val,A1val|H1]).
 %% 3. execution of domain actions
 indixeq(Act,H,H2) :-
         execute_action(Act,H,domain,S),
@@ -186,9 +189,9 @@ indixeq(Act,H,H2) :-
                 now(H1), report_done(Act,S), H2 = [Act|H])).
 
 %% -- fails(+Act,+H)
-%%    on_condition of Act does not hold in H
+%%    guard_condition of Act does not hold in H
 fails(Act,H) :-
-        on_condition(Act,P),
+        guard_condition(Act,P),
         \+ holds(P,H).
 
 %% -- sensing_actionP(+Act)
@@ -213,13 +216,13 @@ execute_action(Act,H,Type,S) :-
         %% increment action counter by 1 and store action information
 	update_counter(N), 
         report_xeq(Type,Act),
-        assert_execution(N,Act,Type,H),
+        assert_execution(N,[Act],Type,H),
         repeat,
         thread_get_message(Message),
         (Message = exog(ExogAct) ->
             exog_action_occurred([ExogAct]),
             handle_exog, now(H1), 
-            (fails(Act,H1) -> S=exog; fail)
+            (fails(Act,H1) -> thread_get_message(_), S=exog; fail)
         ;
             Message = got_sensing(Act,S)),
         clean_execution(N).
@@ -288,8 +291,9 @@ handle_exog(H1,H1) :- !. %% No exogenous actions, keep same history
 
 handle_exog :-
         now(H1),
-        retract(indi_exog(Exog)),
-        append(Exog,H1,H2),
+        findall(A,indi_exog(A),ExogL),
+        append(ExogL,H1,H2),
+        retractall(indi_exog(_)),
         update_now(H2).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -360,10 +364,10 @@ roll_action(A) :-
         report_message(system(6), ['Action', A, 'changed', F, 'to', V]),
         assert(temp(F, V)),
         fail.
-roll_action(e(F, V)) :-
-        report_message(system(6), ['Fluent' F, 'was set to be', V, 'by a query.']),
-        retractall(currently(F, _)), %% in fact, sensed fluents usually do not have initial value
-        assert(currently(F, V)),
+roll_action(e(F,V)) :-
+        report_message(system(6), ['Fluent', F, 'was set to be', V, 'by a query.']),
+        retractall(currently(F,_)), %% in fact, sensed fluents usually do not have initial value
+        assert(currently(F,V)),
         fail.   
 roll_action(_) :- %% handle all the temp/2
 	retract(temp(F,V)),

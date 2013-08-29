@@ -376,19 +376,11 @@ if __name__ == "__main__":
     rospy.loginfo("[AG] Initialized")
     action = "initial"
 
-    robot.reasoner.query(Compound("indigolog","demo_seq_test"))
+    robot.reasoner.query(Compound("indigolog","clean_up_challenge"))
 
     while not action == "done" and not rospy.is_shutdown():
-        ## Query task list: indigolog_plan(X)
-        # indigolog_plan_query = robot.reasoner.query(Compound("indigolog_plan", "X"))
-
-        # if indigolog_plan_query:
-
-        #     indigolog_plan = [(answer["X"]) for answer in indigolog_plan_query]
-        #     plan = min(indigolog_plan)
-        #     rospy.loginfo("plan is {0}".format(plan))
-
-        # Query for indigolog_plan(X) but also action(step) during testing
+        
+        robot.reasoner.query(Compound("retract_facts_for_get_action", "X"))
         answer_query = robot.reasoner.query(Compound("get_action", "Action", "Action_input"))
 
         if not answer_query:
@@ -404,12 +396,15 @@ if __name__ == "__main__":
             rospy.loginfo("[AG] Action to perform = {0} ".format(action))
             rospy.loginfo("[AG] Detail action = {0} ".format(action_input[0]))
 
-            action = action.get_string()
+            current_action = action[0]
+            current_action_input = action_input[0]
 
-            execute(robot, action, action_input)
+            current_action = current_action.get_string()
+
+            execute(robot, current_action, current_action_input)
 
             rospy.loginfo("[AG] Asserting success")
-            robot.reasoner.query(Compound("assert_done", "success", action, action_input))
+            robot.reasoner.query(Compound("assert_done", "success", current_action, current_action_input))
 
             rospy.loginfo("[AG] Ready for next action")
 

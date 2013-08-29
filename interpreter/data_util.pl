@@ -184,7 +184,7 @@ build_string([], S)    :- emptyString(S).
 build_string([E|R], S) :- 
         build_string(R, S2),
         any_to_string(E, SE),
-        concat_string([SE, ` `, S2],S).
+        concat_string([SE, ' ', S2],S).
 
 % -- string_replace(S, E1, E2, S2)
 %       String/atom S2 is string/atom S with all chars E1 replaced by E2

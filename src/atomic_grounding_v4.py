@@ -1,5 +1,5 @@
 #!/usr/bin/python
-import roslib; roslib.load_manifest('atomic_grounding_executioner')
+import roslib; roslib.load_manifest('tue_owls_indigolog_exec')
 import rospy
 import robot_skills
 import robot_skills.amigo
@@ -407,8 +407,15 @@ class GetActionThread (threading.Thread):
         print "Starting " + self.name
         action = "initial" 
 
+        rospy.loginfo("[AG] Waiting 3 seconds for initializing to finish")
+        rospy.sleep(3)
+
         while not action == "done" and not rospy.is_shutdown():
+            #rospy.loginfo("[AG] Retracting facts for query for action")
+            self.robot.reasoner.query(Compound("retract_facts_for_get_action", "X"))
+            rospy.loginfo("[AG] Starting query for action")
             answer_query = self.robot.reasoner.query(Compound("get_action", "Action", "Action_input"))
+
             rospy.logdebug("[AG] Query for action is done.")
 
             if not answer_query:
@@ -450,17 +457,18 @@ class GetActionThread (threading.Thread):
                                 rospy.loginfo("[AG] Found action has already been finished succesfully.")
                             elif is_action_failed:
                                 rospy.loginfo("[AG] Found action has already been finished, but failed.")
-                            
+
                             answer_noted_as_finished = self.robot.reasoner.query(Compound("action_noted_as_finished", current_action, current_action_input))
 
                             if not answer_noted_as_finished:
                                 k = k + 1.0
+                                rospy.loginfo("[AG] action_noted_as_finished is added witch action {0} and action input {1}".format(current_action,current_action_input))                               
                                 self.robot.reasoner.assertz(Compound("action_noted_as_finished", current_action, current_action_input))
 
                             rospy.loginfo("[AG] k = {0}".format(k))
 
                             if k == float(length_action[0]):
-                                break
+                               break
                         else:
                             rospy.loginfo("[AG] New action found!!")
 
@@ -472,18 +480,17 @@ class GetActionThread (threading.Thread):
                             thread = get_action_thread(robot,current_action,current_action_input)
                             thread.setDaemon(True)
                             thread.start()
-                            rospy.loginfo("[AG] Ready for next action")
+                            rospy.loginfo("[AG] In case of concurrent actions, next action will be executed if possible.")
 
                         i=i+1
                         j=j+1.0
-                        rospy.sleep(1)
+                        rospy.sleep(0.2)
                         
-
             rospy.sleep(1)
-            
             self.robot.reasoner.query(Compound("retractall", Compound("thread_finished_succes", "X","Y","Z")))
             self.robot.reasoner.query(Compound("retractall", Compound("thread_finished_failed", "X","Y","Z")))
-
+            self.robot.reasoner.query(Compound("retractall", Compound("action_noted_as_finished", "X","Y")))
+            
         print "Exiting " + self.name
 
 
@@ -586,10 +593,14 @@ class ExecuteActionThread (threading.Thread):
 
         if result == "success":
             rospy.loginfo("[AG] Asserting success for {0}".format(self.name))
+            #rospy.loginfo("[AG] TEST Action success = {0}".format(self.action))
+            #rospy.loginfo("[AG] TEST Action_input success = {0}".format(self.action_input))
             robot.reasoner.query(Compound("assert_done", "success", self.action, self.action_input))
             self.robot.reasoner.assertz(Compound("thread_finished_succes", self.name, self.action, self.action_input))
         if result == "failed":
             rospy.loginfo("[AG] Asserting failed for {0}".format(self.name))
+            #rospy.loginfo("[AG] TEST Action failed = {0}".format(self.action))
+            #rospy.loginfo("[AG] TEST Action_input failed = {0}".format(self.action_input))
             robot.reasoner.query(Compound("assert_done", "failed", self.action, self.action_input))
             self.robot.reasoner.assertz(Compound("thread_finished_failed", self.name, self.action, self.action_input))
 
@@ -611,7 +622,7 @@ if __name__ == "__main__":
 
     rospy.loginfo("[AG] Initialized")
 
-    robot.reasoner.query(Compound("indigolog","demo_seq_test"))
+    robot.reasoner.query(Compound("indigolog","clean_up_challenge"))
 
     # Create new threads
     main_thread = GetActionThread(1, "Main_thread-1", robot)

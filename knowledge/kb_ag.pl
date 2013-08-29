@@ -10,7 +10,7 @@
 :- dynamic executing_action_duplicated/1.
 :- dynamic action/1.
 :- dynamic action_input/1.
-
+:- dynamic executing_action/1.
 
 :- multifile 
 		indigolog_action/1,
@@ -30,25 +30,21 @@
 % !!!!!!!!!!!!!!!!!!!!!!!!!!! COMMENT UNTIL THIS LINE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 % !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
+retract_facts_for_get_action(X) :-
+	retract(action(_)),
+	retract(action_input(_)),
+	retract(executing_action_duplicated(_)).
+
 get_action(Action,Action_input) :-
     % First duplicate action plan so that I can assert / delete something out of the same list to check concurrent actions.    
-	(retract(action(_)),
-	retract(action_input(_)),
 	duplicate_action(X),
 	(get_action_list(Action2,Action_input2);
 	action(Action),
-	action_input(Action_input)));
-	(duplicate_action(X),
-	(get_action_list(Action2,Action_input2);
-	action(Action),
-	action_input(Action_input))).
-
+	action_input(Action_input)).
 
 duplicate_action(X) :-
 	executing_action(Action_with_inputs),
-	((retract(executing_action_duplicated(_)),
-	assert(executing_action_duplicated(Action_with_inputs)));
-	assert(executing_action_duplicated(Action_with_inputs))).
+	assert(executing_action_duplicated(Action_with_inputs)).
 
 get_action_list(Action,Action_input) :-
 	check_concurrent_action(Action_with_inputs),
@@ -321,3 +317,8 @@ indigolog_plan([navigate_generic(lookat_point_3d,1, 2, 0.88), %'front' (y-offset
 %amigo.reasoner.query(Compound("assertz",Compound("indigolog_plan", Sequence(Compound("perception_recognition","face","2.5")))))
 %amigo.reasoner.query(Compound("assertz",Compound("indigolog_plan", Sequence(Compound("perception_recognition","object_and_face","2.5")))))
 %amigo.reasoner.query(Compound("assertz",Compound("indigolog_plan", Sequence(Compound("perception_recognition","laser_2d","2.5","1.2","-1.0","1.0")))))
+
+
+
+%amigo.reasoner.query(Compound("assertz",Compound("executing_action", Sequence(Compound("arm","prepare_grasp","left")))))
+

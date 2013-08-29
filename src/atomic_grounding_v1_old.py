@@ -1,5 +1,5 @@
 #!/usr/bin/python
-import roslib; roslib.load_manifest('atomic_grounding_executioner')
+import roslib; roslib.load_manifest('tue_owls_indigolog_exec')
 
 import rospy
 import robot_skills

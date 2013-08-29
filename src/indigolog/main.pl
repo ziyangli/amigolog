@@ -11,7 +11,7 @@
 %% :- consult(demo_elevator).
 
 %% consult testing file
-:- consult(util_test).
+%% :- consult(util_test).
 
 %% -- main
 main :-	indigolog(waiter_program).

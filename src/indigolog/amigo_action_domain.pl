@@ -72,6 +72,10 @@ poss(arm(to_pre_grasp_point, _, _, _, _), true).
 prim_action(arm(grasp, Side, _, _, _)) :- domain(Side, side).
 poss(arm(grasp, _, _, _, _), true).
 
+%% -- arm(dropoff,Side,X,Y,Z)
+%%    move the gripper to (X,Y,Z) to drop off the object 
+prim_action(arm(drop_off,Side,_,_,_)) :- domain(Side,side).
+poss(arm(drop_off,_,_,_,_),true).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% SPINDLE
@@ -122,7 +126,8 @@ causes_val(navigate_generic(goal_pose_2d,X,Y,Phi),explored_loc_f(X,Y,Phi),true,t
 %%    navigate to a pose determined for looking at point (X,Y,Z)
 prim_action(navigate_generic(lookat_point_3d,_,_,_)).
 poss(navigate_generic(lookat_point_3d, _, _, _),true).
-causes_val(navigate_generic(lookat_point_3d,X,Y,_),explored_loc_f(X,Y,_),true,true).
+causes_val(navigate_generic(lookat_point_3d,X,Y,Z),explored_loc_f(X,Y,Z),true,true).
+%% causes_val(navigate_generic(lookat_point_3d,X,Y,_),explored_target_f(loc_id_f),true,true).
 
 %% -- navigate_generic(prepare_grasp_orientation, Side, X, Y, Z)
 %%    navigate to a pre-grasp-pose determined for grasping object at point (X, Y, Z)
@@ -148,10 +153,11 @@ poss(perception_recognition(laser_2d, _, _, _, _), true).
 
 
 prim_fluent(obj_id_f).
-initially(obj_id_f,desk-1).
-
+initially(obj_id_f, unknown).
 prim_fluent(loc_id_f).
+initially(loc_id_f, unknown).
 prim_fluent(ppl_id_f).
+initially(ppl_id_f, unknown).
 
 prim_fluent(point_x_f).
 prim_fluent(point_y_f).
@@ -160,6 +166,9 @@ prim_fluent(point_z_f).
 prim_fluent(pose_x_f).
 prim_fluent(pose_y_f).
 prim_fluent(pose_z_f).
+
+prim_fluent(task_done_f).
+initially(task_done_f,no).
 
 prim_fluent(explored_loc_f(_,_,_)). %% pose
 initially(explored_loc_f(_,_,_),false).
@@ -171,76 +180,149 @@ initially(explored_loc_f(_,_,_),false).
 prim_action(query(_)).
 poss(query(_),true).
 
-query_map(obj_loc(Obj_ID),obj_loc_Q(Obj_ID,X,Y,Z),[point_x_f,X,point_y_f,Y,point_z_f,Z]).
-
-% causes_val(query(obj_loc_Q(X,_,_),S),point_x_f,X,S=true).
-% causes_val(query(obj_loc_Q(_,Y,_),S),point_y_f,Y,S=true).
-% causes_val(query(obj_loc_Q(_,_,Z),S),point_z_f,Z,S=true).
-% causes_val(query(obj_loc_Q(_,_,_),S),point_x_f,unknown,S=failed).
-% causes_val(query(obj_loc_Q(_,_,_),S),point_y_f,unknown,S=failed).
-% causes_val(query(obj_loc_Q(_,_,_),S),point_z_f,unknown,S=failed).
-
-proc(query_test, [query(obj_loc(obj_id_f)),navigate_generic(lookat_point_3d,point_x_f,point_y_f,point_z_f)]).
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% QUERY
-% obj_loc_Q(X, Y, Z) :-
-% 	property_expected(ObjectID, position, in_front_of(amigo)),
-% 	property_expected(ObjectID, position, [X,Y,Z]).
+obj_loc_Q(X,Y,Z) :-
+        ( property_expected(ObjectID, position, in_front_of(amigo)),
+	  property_expected(ObjectID, position, [TX,TY,TZ]), X is TX-0.02, Y is TY+0.01, Z is TZ-0.07;
+          X=out_of_reach,Y=out_of_reach,Z=out_of_reach).
 
-obj_loc_Q(desk-1,1,2,3).
-% poi_Q(Target, X, Y, Z) :-
-%         point_of_interest(robotics_testlab_A, _, Target, point_3d(X, Y, Z)).
+% obj_loc_Q(desk-1,1,2,3).
+poi_Q(Target,X,Y,Z) :-
+        point_of_interest(robotics_testlab_A,_,Target,point_3d(X,Y,Z)).
 
-poi_Q(Traget,1,2,3).
+%% poi_Q(Traget,1,2,3).
 
+%% object_roi(coke-1, 1.0, 2.0, 3.0).
 %% -- navigate_Q(+Target, -X, -Y, -Phi)
 %%    give a Target, return loc to go
-navigate_Q(Target, X, Y, Phi) :- ! .
-        
-%% proc(demo_seq_test, [navigate_generic(goal_pose_2d, 2,0, 3), spindle(medium, 10)]).
+%% navigate_Q(Target, X, Y, Phi) :- ! .
 
-%% proc(demo_query_test, [query(object_roi(coke-1, X, Y, Z), _), navigate_generic(goal_pose_2d, X, Y, Z)]).
+explore_Q(Target) :-
+        (point_of_interest(_,_,Target,point_3d(X,Y,Z)),
+        now(H), \+ has_val(explored_loc_f(X,Y,Z),true,H);
+            Target = all_explored).
 
-% spindle(send_goal_laser, 5, Z), head(send_goal, X, Y, Z), perception_recognition(laser_2d, 2, X, Y, Z),
-%% head(send_goal, 1, 2, 0.9),
-proc(demo_seq_test,  [query(poi_Q(desk_1, IX, IY, IZ), _), navigate_generic(lookat_point_3d, IX, IY, IZ), spindle(send_goal, 5, IZ), head(send_goal, IX, IY, IZ), perception_recognition(object, 2.5), query(obj_loc_Q(X, Y, Z), _), arm(prepare_grasp, left), spindle(send_goal, 5, Z), navigate_generic(prepare_grasp_orientation, left,X,Y,Z), gripper(left, open), head(reset), spindle(high, 5), arm(to_pre_grasp_point, left, X, Y, Z), arm(grasp, left, X, Y, Z), gripper(left, close), arm(lift, left), arm(retract, left), arm(carrying, left)]).  
+dp_Q(Target,X,Y,Z) :-
+        dropoff_point(robotics_testlab_A,clean_up,trashbin,point_3d(X,Y,Z)).
 
-%% %%% Migration of Find object and Grasp object state machine
+query_map(explore_target,explore_Q(Target),[loc_id_f,Target]).
+query_map(poi(Obj_ID),poi_Q(Obj_ID,X,Y,Z),[point_x_f,X,point_y_f,Y,point_z_f,Z]).
+query_map(obj_loc,obj_loc_Q(X,Y,Z),[point_x_f,X,point_y_f,Y,point_z_f,Z]).
+query_map(drop_point(Target),dp_Q(Target,X,Y,Z),[point_x_f,X,point_y_f,Y,point_z_f,Z]).
+%% query_map(obj_loc(Obj_ID),obj_loc_Q(Obj_ID,X,Y,Z),[point_x_f,X,point_y_f,Y,point_z_f,Z]).
 
-% :-dynamic object_loc/4.
-% :-dynamic object_roi/4.
-% :-dynamic visited/3.
+proc(next_loc_to_check, [query(explore_target), %% update loc_id_f
+                         query(poi(loc_id_f))   %% update point x,y,z
+                         ]).
 
-% % object_loc(coke-1, 1.0, 2.2, 3.2).
-object_roi(coke-1, 1.0, 2.0, 3.0).
-% object_roi(coke-1, 2.0, 3.0, 4.0).
+proc(navigate, [navigate_generic(lookat_point_3d,point_x_f,point_y_f,point_z_f)]).
 
-% prim_fluent(object_foundp).
-% initially(object_foundp, false).
+proc(check_object, [spindle(send_goal,5.0,point_z_f),
+                    head(send_goal,point_x_f,point_y_f,point_z_f),
+                    perception_recognition(object,2.5),
+                    query(obj_loc) %% update point x,y,z
+                   ]).
 
-% % prim_action(senseFound(_)). %% give object ID as input
-% % poss(senseFound(_), true).
-% % senses(senseFound(_), object_loc).
+proc(search_trash, [next_loc_to_check,
+                    navigate,
+                    check_object]).
 
-% prim_action(queryFound(ID, X, Y, Z)).
-% poss(queryFound(_, _, _, _), true).
-% causes_val(queryFound(ID, X, Y, Z), object_foundp, true, call(object_loc(ID, X, Y, Z))).
+proc(adjust_grasping_pose, [arm(prepare_grasp,right),
+                            spindle(send_goal,5.0,point_z_f),
+                            navigate_generic(prepare_grasp_orientation,right,point_x_f,point_y_f,point_z_f),                            
+                            gripper(right,open),
+                            head(reset),
+                            spindle(high,5.0)
+             ]).
 
-% find_next_roi(ID, X, Y, Z) :-
-%         object_roi(ID, X, Y, Z), \+ visited(X, Y, Z).
+proc(grasp, [arm(to_pre_grasp_point,right,point_x_f,point_y_f,point_z_f),
+             arm(grasp,right,point_x_f,point_y_f,point_z_f),
+             gripper(right,close),
+             arm(lift,right),
+             arm(retract,right),
+             arm(carrying,right)
+            ]).
 
-% prim_action(queryROI(ID, X, Y, Z)).
-% poss(queryROI(_, _, _, _), true).
-% causes_val(queryROI(ID, X, Y, Z), object_foundp, false, call(find_next_roi(ID, X, Y, Z))).
+proc(to_drop_point, [query(poi(trashbin1)),
+                     navigate_generic(prepare_grasp_orientation,right,point_x_f,point_y_f,point_z_f)
+                    ]).
 
-% proc(search_object_ROI(ID), [queryROI(ID, X, Y, Z), if(ground(X), [navigate_lookpoint(X, Y, Z), move_head(down, 20), move_spindle(70), perception_object(4), find_object(ID)], say('Sorry, I have tried but I can not find it!'))]).
+proc(drop_off, [query(drop_point(trashbin1)),
+                arm(drop_off,right,point_x_f,point_y_f,point_z_f),
+                gripper(right,open)
+               ]).
 
-% %% find_object state machine!!!!
-% proc(find_object(ID), [queryFound(ID, X, Y, Z), if(object_foundp, say('I find it.'), search_object_ROI(ID))]).
+proc(clean_up_challenge, [while(neg(loc_id_f=all_explored),
+                                [search_trash,
+                                 if(neg(point_x_f=out_of_reach),
+                                    [adjust_grasping_pose,
+                                     grasp,
+                                     to_drop_point,
+                                     drop_off],
+                                    clean_up_challenge)
+                                ])
+                         ]).
 
-% % proc(update_object_pose, )
+prim_fluent(lost_obj_f).
+initially(lost_obj_f,false).
 
-% %% grasp_object state machine!!!!
-% % proc(grasp_object(ID), [queryFound(ID, X, Y, Z), navigate_lookpoint(X, Y, Z), pi(side, set_gripper(side, open)), move_spindle(Z), ]).
+guard_condition(arm(grasp,_,_,_,_), lost_obj_f=false).
+rescues(arm(grasp,_,_,_,_),
+        [arm(to_pre_grasp_point,right,point_x_f,point_y_f,point_z_f),
+         arm(grasp,right,point_x_f,point_y_f,point_z_f)]).
+
+exog_action(forward).
+causes_val(forward,point_y_f,V,V is point_y_f+0.05).
+causes_val(forward,lost_obj_f,true,true).
+
+exog_action(backward).
+causes_val(backward,point_y_f,V,V is point_y_f-0.05).
+causes_val(backward,lost_obj_f,true,true).
+
+exog_action(left).
+causes_val(left,point_x_f,V,V is point_x_f-0.05).
+causes_val(left,lost_obj_f,true,true).
+
+exog_action(right).
+causes_val(right,point_x_f,V,V is point_x_f+0.05).
+causes_val(right,lost_obj_f,true,true).
+
+exog_action(down).
+causes_val(down,point_z_f,V,V is point_z_f-0.05).
+causes_val(down,lost_obj_f,true,true).
+
+exog_action(up).
+causes_val(up,point_z_f,V,V is point_z_f+0.05).
+causes_val(up,lost_obj_f,true,true).
+
+%% reaction test
+proc(demo_failure_handling, [search_trash,
+                             adjust_grasping_pose,
+                             grasp
+                            ]).
+
+%% par test
+proc(demo_parallel_execution, [par(navigate_generic(goal_pose_2d,4.92,0.82,1.59),
+                                   spindle(low,5.0))
+                              ]).
+
+% proc(grasp_obj_at(LOC), [query(poi(LOC)),
+%                          navigate_generic(lookat_point_3d,point_x_f,point_y_f,point_z_f),
+%                          spindle(send_goal,5,point_z_f),
+%                          head(send_goal,point_x_f,point_y_f,point_z_f),
+%                          perception_recognition(object,2.5),
+%                          query(obj_loc),
+%                          arm(prepare_grasp,left),
+%                          spindle(send_goal,5,point_z_f),
+%                          navigate_generic(prepare_grasp_orientation,left,point_x_f,point_y_f,point_z_f),
+%                          gripper(left,open),
+%                          head(reset),
+%                          spindle(high,5),
+%                          arm(to_pre_grasp_point,left,point_x_f,point_y_f,point_z_f),
+%                          arm(grasp,left,point_x_f,point_y_f,point_z_f),
+%                          gripper(left,close),
+%                          arm(lift,left),
+%                          arm(retract,left),
+%                          arm(carrying,left)]).
 
